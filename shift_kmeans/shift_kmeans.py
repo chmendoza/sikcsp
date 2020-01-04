@@ -11,9 +11,90 @@ from sklearn.exceptions import ConvergenceWarning
 
 import shift_kmeans.utils as utils
 import shift_kmeans.wrappers as wrappers
+import shift_kmeans.datasets.utils as data
+
+###############################################################################
+# Initialization
 
 
-def _k_init(X, n_clusters, kernel_length,
+def init_kernels(X, n_clusters, kernel_length, init, x_squared_norms=None,
+                  random_state=None, **kwargs):
+    """
+    Compute initial kernels
+
+    Parameters
+    ----------
+    X (numpy.ndarray):
+        Training data. Rows are samples.
+    n_clusters (int):
+        Number of initial seed kernels
+    kernel_length (int):
+        Lenght of each kernel
+    init ('k-means++', 'random', numpy.ndarray, or a function):
+        Method for initialization. If it's a function, it should have this
+        call signature:
+        kernels, shifts = init(
+            X, n_clusters, kernel_length, random_state, **kwargs).
+        random_state must be a RandomState instance.
+    x_squared_norms (numpy.ndarray or None):
+        Equivalent to np.matmul(X, X.T). If None, it would be computed if
+        init='kmeans++'.
+    random_state (Int or RandomState instance):
+        The generator used to initialize the centers. Use int to make the
+        randomness deterministic.
+    **kwargs:
+        If init=='kmeans++', the following keyword argument can be used
+            n_local_trials (int):
+                The number of seeding trials for each center (except the first),
+                of which the one reducing inertia the most is greedily chosen.
+                Set to None to make the number of trials depend logarithmically
+                on the number of seeds (2+log(k)); this is the default.
+
+
+    Returns
+    -------
+    kernels (numpy.ndarray):
+        The kernel seeds
+    shifts (numpy.ndarray):
+        shifts[i] is the shift of kernels[i]
+    """
+
+    random_state = check_random_state(random_state)
+
+    n_samples, sample_length = X.shape
+
+    if isinstance(init, str) and init == 'k-means++':
+        if x_squared_norms is None:
+            x_squared_norms = row_norms(X, squared=True)
+        if len(kwargs) == 0 or 'n_local_trials' not in kwargs:
+            n_local_trials = None
+        kernels, shifts = _kmeans_plus_plus(
+            X, n_clusters, kernel_length, x_squared_norms,
+            random_state, n_local_trials)
+    elif isinstance(init, str) and init == 'random':
+        seeds = random_state.permutation(n_samples)[:n_clusters]
+        kernels = X[seeds]
+        kernels = utils.pick_random_windows(kernels, 1, kernel_length,
+                                            random_state).squeeze()
+        n_offsets = sample_length - kernel_length + 1
+        shifts = random_state.randint(0, n_offsets, size=n_clusters)
+    elif hasattr(init, '__array__'):
+        # ensure that the centers have the same dtype as X
+        # this is a requirement of fused types of cython
+        kernels = np.array(init, dtype=X.dtype)
+    elif callable(init):
+        kernels, shifts = init(X, n_clusters, kernel_length, random_state, **kwargs)
+        kernels = np.asarray(kernels, dtype=X.dtype)
+        shifts = np.asarray(shifts, dtype=X.dtype)
+    else:
+        raise ValueError("the init parameter for the k-means should "
+                         "be 'k-means++' or 'random' or an ndarray, "
+                         "'%s' (type '%s') was passed." % (init, type(init)))
+
+    return kernels, shifts
+
+
+def _kmeans_plus_plus(X, n_clusters, kernel_length,
             x_squared_norms, random_state, n_local_trials=None):
     """
     Shift-invariant kmeans++
@@ -203,7 +284,7 @@ def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
     random_state = check_random_state(random_state)
 
     best_kernel_indexes, best_shifts = None, None
-    best_inertia, best_kernels = None, None
+    best_kernels, best_inertia = None, None
 
     # subtract of mean of x for more accurate distance computations
     X_mean = X.mean(axis=0)
@@ -212,9 +293,6 @@ def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
     # Precompute squared norms of rows of X for efficient computation of
     # Euclidean distances between kernels and samples.
     x_squared_norms = row_norms(X, squared=True)
-
-    # Init
-#    kernels, shifts = _k_init(X, n_clusters, kernel_length, x_squared_norms, random_state)
 
     seeds = random_state.randint(np.iinfo(np.int32).max, size=n_init)
     for seed in seeds:
@@ -244,7 +322,17 @@ def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
     return best_kernels, best_kernel_indexes, best_shifts, best_inertia, best_n_iter
 
 
-def si_kmeans_single(X, n_clusters, kernel_length, max_iter, tol, x_squared_norms, random_state):
+def si_kmeans_single(X, n_clusters, kernel_length, max_iter, tol,
+                     x_squared_norms, random_state):
+    """
+    Single run of shift-invariant k-means
+    """
+
+    random_state = check_random_state(random_state)
+
+    best_kernel_indexes, best_shifts = None, None
+    best_kernels, best_inertia = None, None
+
     # Init
     kernels, shifts = _k_init(X, n_clusters, kernel_length, x_squared_norms, random_state)
 
