@@ -9,7 +9,6 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 from sklearn.utils.extmath import row_norms
 from sklearn.utils import check_random_state
@@ -46,29 +45,37 @@ X_centered = X - X_mean
 # Euclidean distances between kernels and samples.
 x_squared_norms = row_norms(X_centered, squared=True)
 
-init_pot, rand_pot = 0, 0
+kmeanspp_pot, rand_pot = 0, 0
 
 for run in np.arange(n_runs):
     # Run shift-invariant kmeans++
-    init_kernels, init_shifts =  sikmeans._k_init(
-        X_centered, n_kernels, kernel_length, x_squared_norms, random_state)
+    kmeanspp_kernels, kmeanspp_shifts =  sikmeans.init_kernels(
+        X_centered, n_kernels, kernel_length, 'k-means++', x_squared_norms,
+        random_state)
 
     # Padd and shift kernels
-    init_kernels = np.pad(init_kernels, [(0, 0), (0, n_shifts-1)], mode='constant')
-    init_kernels = utils.roll_rows(init_kernels, init_shifts)
+    kmeanspp_kernels = np.pad(kmeanspp_kernels, [(0, 0), (0, n_shifts-1)], mode='constant')
+    kmeanspp_kernels = utils.roll_rows(kmeanspp_kernels, kmeanspp_shifts)
 
     # Add back the mean to the kernels
-    init_kernels += X_mean
+    kmeanspp_kernels += X_mean
 
     # Pick kernels randomly from X for comparison
-    unique_ids = random_state.choice(n_samples, size=n_kernels, replace=False)
-    rand_kernels = X[unique_ids]
+    rand_kernels, rand_shifts = sikmeans.init_kernels(
+        X_centered, n_kernels, kernel_length, 'random', random_state)
+
+    # Padd and shift kernels
+    rand_kernels = np.pad(rand_kernels, [(0, 0), (0, n_shifts-1)], mode='constant')
+    rand_kernels = utils.roll_rows(rand_kernels, rand_shifts)
+
+    # Add back the mean to the kernels
+    rand_kernels += X_mean
 
     # Compute potential with seed kernels
-    init_labels, init_mindist = pairwise_distances_argmin_min(
-        X=X_centered, Y=init_kernels, metric='euclidean',
+    kmeanspp_labels, kmeanspp_mindist = pairwise_distances_argmin_min(
+        X=X_centered, Y=kmeanspp_kernels, metric='euclidean',
         metric_kwargs={'squared': True})
-    init_pot += init_mindist.sum()
+    kmeanspp_pot += kmeanspp_mindist.sum()
 
     # Compute potential with random kernels
     rand_labels, rand_mindist = pairwise_distances_argmin_min(
@@ -76,7 +83,8 @@ for run in np.arange(n_runs):
         metric_kwargs={'squared': True})
     rand_pot += rand_mindist.sum()
 
-print(f'Average potential after {n_runs} runs\n')
 print('-------------------------------------')
-print(f'With kernels computed using kmeans++: {init_pot / n_runs}\n')
-print(f'With random kernels: {rand_pot / n_runs}\n')
+print(f'Average potential after {n_runs} runs')
+print('-------------------------------------\n')
+print(f'With kernels computed using k-means++: {kmeanspp_pot / n_runs}')
+print(f'With random kernels: {rand_pot / n_runs}')
