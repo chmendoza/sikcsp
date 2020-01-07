@@ -5,9 +5,10 @@ import warnings
 import numpy as np
 import scipy.sparse as sp
 
-from sklearn.utils.extmath import row_norms, stable_cumsum
+from sklearn.utils.extmath import row_norms, stable_cumsum, squared_norm
 from sklearn.utils import check_random_state
 from sklearn.exceptions import ConvergenceWarning
+from sklearn.metrics.pairwise import pairwise_distances_argmin_min
 
 import shift_kmeans.utils as utils
 import shift_kmeans.wrappers as wrappers
@@ -17,7 +18,7 @@ import shift_kmeans.datasets.utils as data
 # Initialization
 
 
-def init_kernels(X, n_clusters, kernel_length, init, x_squared_norms=None,
+def init_kernels(X, n_clusters, kernel_length, init='k-means++', x_squared_norms=None,
                   random_state=None, **kwargs):
     """
     Compute initial kernels
@@ -40,12 +41,12 @@ def init_kernels(X, n_clusters, kernel_length, init, x_squared_norms=None,
         Equivalent to np.matmul(X, X.T). If None, it would be computed if
         init='kmeans++'.
     random_state (Int or RandomState instance):
-        The generator used to initialize the centers. Use int to make the
+        The generator used to initialize the kernels. Use int to make the
         randomness deterministic.
     **kwargs:
         If init=='kmeans++', the following keyword argument can be used
             n_local_trials (int):
-                The number of seeding trials for each center (except the first),
+                The number of seeding trials for each kernel (except the first),
                 of which the one reducing inertia the most is greedily chosen.
                 Set to None to make the number of trials depend logarithmically
                 on the number of seeds (2+log(k)); this is the default.
@@ -79,7 +80,7 @@ def init_kernels(X, n_clusters, kernel_length, init, x_squared_norms=None,
         n_offsets = sample_length - kernel_length + 1
         shifts = random_state.randint(0, n_offsets, size=n_clusters)
     elif hasattr(init, '__array__'):
-        # ensure that the centers have the same dtype as X
+        # ensure that the kernels have the same dtype as X
         # this is a requirement of fused types of cython
         kernels = np.array(init, dtype=X.dtype)
     elif callable(init):
@@ -113,9 +114,9 @@ def _kmeans_plus_plus(X, n_clusters, kernel_length,
     x_squared_norms (numpy.ndarray):
         Equivalent to np.matmul(X, X.T)
     random_state (RandomState):
-        The generator used to initialize the centers.
+        The generator used to initialize the kernels.
     n_local_trials (int):
-        The number of seeding trials for each center (except the first),
+        The number of seeding trials for each kernel (except the first),
         of which the one reducing inertia the most is greedily chosen.
         Set to None to make the number of trials depend logarithmically
         on the number of seeds (2+log(k)); this is the default.
@@ -182,8 +183,8 @@ def _kmeans_plus_plus(X, n_clusters, kernel_length,
 
     # Pick the remaining n_clusters-1 points
     for c in range(1, n_clusters):
-        # Choose center candidates by sampling with probability proportional
-        # to the squared distance to the closest existing center
+        # Choose kernel candidates by sampling with probability proportional
+        # to the squared distance to the closest existing kernel
         rand_vals = random_state.random_sample(n_local_trials) * current_pot
         candidate_ids = np.searchsorted(stable_cumsum(closest_dist_sq),
                                         rand_vals)
@@ -202,7 +203,7 @@ def _kmeans_plus_plus(X, n_clusters, kernel_length,
                                                     n_windows, kernel_length,
                                                     random_state)
 
-        # Compute distances to center candidates for all windows
+        # Compute distances to kernel candidates for all windows
         distance_to_candidates = np.empty((n_local_trials, n_windows, n_windows, n_samples))
         for trial in np.arange(n_local_trials):
             distance_to_candidates[trial] = \
@@ -230,15 +231,20 @@ def _kmeans_plus_plus(X, n_clusters, kernel_length,
         closest_dist_sq = distance_to_candidates[best_candidate_id,
                                                  best_window_id, best_shift_id]
 
-        # Permanently add best center candidate, and its best shift, found in
+        # Permanently add best kernel candidate, and its best shift, found in
         # local tries
         kernels[c] = all_windows[best_candidate_id, best_window_id]
         shifts[c] = best_shift_id
 
     return kernels, shifts
 
-def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
-                            max_iter=300, tol=1e-3, random_state=None):
+
+###############################################################################
+# Main algorithm
+
+def shift_invariant_k_means(X, n_clusters, kernel_length, init='k-means++',
+                            n_init=10, max_iter=300, tol=1e-3,
+                            random_state=None):
     """
     Shift-invariant k-means algorithm
 
@@ -250,6 +256,12 @@ def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
         Number of clusters to form, as well as the number of kernels to find.
     kernel_length (int):
         The length of each kernel.
+    init ('k-means++', 'random', numpy.ndarray, or a function):
+        Method for initialization. If it's a function, it should have this
+        call signature:
+        kernels, shifts = init(
+             X, n_clusters, kernel_length, random_state, **kwargs).
+        random_state must be a RandomState instance.
     n_init (int):
         The number of times the algorithm is run with different centroid seeds.
         The final results would be from the iteration where the inertia is the
@@ -268,10 +280,10 @@ def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
     -------
     kernels (numpy.ndarray):
         A matrix with the learned kernels in its rows.
-    kernel_index (numpy.ndarray):
-        kernel_index[i] is the index of the kernel (row of `kernels`) closest
+    labels (numpy.ndarray):
+        labels[i] is the index of the kernel (row of `kernels`) closest
         to the sample X[i].
-    time_shift (numpy.ndarray):
+    shifts (numpy.ndarray):
         time_shift[i] is the shift that minimizes the distance to the closest
         kernel to the sample X[i].
     inertia (float):
@@ -283,7 +295,7 @@ def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
 
     random_state = check_random_state(random_state)
 
-    best_kernel_indexes, best_shifts = None, None
+    best_labels, best_shifts = None, None
     best_kernels, best_inertia = None, None
 
     # subtract of mean of x for more accurate distance computations
@@ -297,18 +309,18 @@ def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
     seeds = random_state.randint(np.iinfo(np.int32).max, size=n_init)
     for seed in seeds:
         # run a shift-invariant k-means once
-        kernels, kernel_indexes, shifts, inertia, n_iter_ = si_kmeans_single(
+        kernels, labels, shifts, inertia, n_iter_ = si_kmeans_single(
             X, n_clusters, kernel_length, max_iter, tol,
             x_squared_norms, random_state=seed)
         # determine if these results are the best so far
         if best_inertia is None or inertia < best_inertia:
             best_kernels = kernels.copy()
-            best_kernel_indexes = kernel_indexes.copy()
+            best_labels = labels.copy()
             best_shifts = shifts.copy()
             best_inertia = inertia
             best_n_iter = n_iter_
 
-    distinct_clusters = len(set(best_kernel_indexes))
+    distinct_clusters = len(set(best_labels))
     if distinct_clusters < n_clusters:
         warnings.warn(
             "Number of distinct clusters ({}) found smaller than "
@@ -319,22 +331,86 @@ def shift_invariant_k_means(X, n_clusters, kernel_length, n_init=10,
 
     best_kernels += X_mean
 
-    return best_kernels, best_kernel_indexes, best_shifts, best_inertia, best_n_iter
+    return best_kernels, best_labels, best_shifts, best_inertia, best_n_iter
 
 
-def si_kmeans_single(X, n_clusters, kernel_length, max_iter, tol,
-                     x_squared_norms, random_state):
+def si_kmeans_single(X, n_clusters, kernel_length, init='k-means++',
+                     max_iter=300, tol=1e-3, x_squared_norms=None,
+                     random_state=None):
     """
     Single run of shift-invariant k-means
     """
 
     random_state = check_random_state(random_state)
 
-    best_kernel_indexes, best_shifts = None, None
+    if x_squared_norms is None:
+        x_squared_norms = row_norms(X, squared=True)
+
+    best_labels, best_shifts = None, None
     best_kernels, best_inertia = None, None
 
     # Init
-    kernels, shifts = _k_init(X, n_clusters, kernel_length, x_squared_norms, random_state)
+    kernels, _ = init_kernels(
+        X, n_clusters, kernel_length, init, x_squared_norms, random_state)
 
-    return None
+    print('Initialization completed.')
 
+    for iteration in range(max_iter):
+        kernels_old = kernels.copy()
+        labels, shifts, distances = _asignment_step(X, kernels, x_squared_norms)
+        kernels = _kernels_update_step(
+            X, n_clusters, labels, shifts, distances)
+
+        inertia = distances.sum()
+        print("Iteration %2d, inertia %.3f" % (i, inertia))
+
+        if best_inertia is None or inertia < best_inertia:
+            best_labels = labels.copy()
+            best_shifts = shifts.copy()
+            best_kernels = kernels.copy()
+            best_inertia = inertia
+
+        kernel_change = squared_norm(kernels_old - kernels)
+        if kernel_change <= tol:
+            if verbose:
+                print("Converged at iteration %d: "
+                      "kernel changes %e within tolerance %e"
+                      % (iteration, kernel_change, tol))
+            break
+
+    if kernel_change > 0:
+    # rerun assingment step in case of non-convergence so that predicted
+    # labels match cluster centers
+        best_labels, best_shifts, distances = _asignment_step(
+            X, best_kernels, x_squared_norms, random_state)
+        best_inertia = distances.sum()
+
+    return best_kernels, best_labels, best_shifts, best_inertia, iteration+1
+
+
+def _asignment_step(X, kernels, x_squared_norms):
+    """
+    Find the index of the shifted kernel that is closest to each sample
+
+    Parameters
+    ----------
+    X (numpy.ndarray):
+        Training data. Rows of X are samples.
+    kernels (numpy.ndarray):
+        Centroids of the clusters.
+    x_squared_norms (numpy.ndarray):
+        Squared euclidean norm of rows of X. This is used to speed up the
+        computation of the Euclidean distances between samples and kernels.
+
+    Returns
+    -------
+    labels (numpy.ndarray):
+        labels[i] is the index of kernel closest to sample X[i]
+    shifts (numpy.ndarray):
+        shifts[i] is the best shift of the kernel closest to X[i]
+    distances (numpy.ndarray):
+        distances[i] is the distance of X[i] to the closest kernel
+    """
+
+    return wrappers.shift_invariant_pairwise_distances_argmin_min(
+        X, kernels, x_squared_norms)
