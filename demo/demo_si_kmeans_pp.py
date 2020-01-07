@@ -1,5 +1,5 @@
 """
-Numerical test of _k_init(), the shift-invariant k-means++ algorithm.
+Numerical test of the shift-invariant k-means++ algorithm.
 """
 
 import os
@@ -55,7 +55,8 @@ for run in np.arange(n_runs):
 
     # Padd and shift kernels
     kmeanspp_kernels = np.pad(kmeanspp_kernels, [(0, 0), (0, n_shifts-1)], mode='constant')
-    kmeanspp_kernels = utils.roll_rows(kmeanspp_kernels, kmeanspp_shifts)
+    kmeanspp_kernels = utils.roll_rows(kmeanspp_kernels, kmeanspp_shifts[:, None])
+    kmeanspp_kernels = kmeanspp_kernels.squeeze()
 
     # Add back the mean to the kernels
     kmeanspp_kernels += X_mean
@@ -66,7 +67,8 @@ for run in np.arange(n_runs):
 
     # Padd and shift kernels
     rand_kernels = np.pad(rand_kernels, [(0, 0), (0, n_shifts-1)], mode='constant')
-    rand_kernels = utils.roll_rows(rand_kernels, rand_shifts)
+    rand_kernels = utils.roll_rows(rand_kernels, rand_shifts[:, None])
+    rand_kernels = rand_kernels.squeeze()
 
     # Add back the mean to the kernels
     rand_kernels += X_mean
