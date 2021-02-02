@@ -1,4 +1,9 @@
+shift_kmeans_cupy/
+.*
+demo/
+*config*
 __pycache__/
 *.py[cod]
 *.swp
 .github
+.matplotlibrc
