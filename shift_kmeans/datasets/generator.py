@@ -6,6 +6,8 @@ import itertools
 import numpy as np
 from scipy import special
 
+from shift_kmeans.utils import check_rng
+
 from ..datasets.dictionaries import sindict
 from ..datasets.utils import roll_rows_of_3D_matrix, add_noise
 
@@ -82,69 +84,79 @@ def make_samples(dictionary, n_atoms, n_nonzeros, n_samples_per_comb,
 
 
 
-def make_samples_from_shifted_kernels(n_samples, sample_length, dictionary,
-                                      n_kernels_per_sample, scale=True,
-                                      sigma=0.2, mu=1, snr=10):
+def make_samples_from_shifted_centroids(n_samples, sample_length, dictionary,
+                                      n_centroids_per_sample, scale=True,
+                                      sigma=0.2, mu=1, snr=10,
+                                      rng=None):
     """
-    Make samples by shifting kernels
+    Make samples by shifting centroids
 
     It makes `n_samples` samples of length `sample_length` by sparsely
-    combining `n_kernels_per_sample` kernels from the `dictionary`. The
+    combining `n_centroids_per_sample` centroids from the `dictionary`. The
     generated samples, `X`, and a list of tuples (nu,tau,alpha), are returned,
     where nu, tau, and alpha are the index, time shift, and amplitudes of the
-    kernels picked in the sparse combination. Gaussian noise is added to the
+    centroids picked in the sparse combination. Gaussian noise is added to the
     samples to achieve the given linear `snr`.
 
     Args:
-        n_samples (int):            Number of samples to be generated
-        sample_length (int):        Length of each sample
-        dictionary (numpy.ndarray): The dictionary of kernels used to generate
-                                    the samples.
-        n_kernels_per_sample (int): Number of kernels used to generate a
-                                    sample.
-        scale (bool):               If True, scale the kernels with amplitudes
-                                    drawn from Y ~  Normal(mu, sigma^2). If
-                                    False, don't scale the kernels.
-        sigma (float):              Standard deviation of Y
-        mu (float):                 Mean of Y
-        snr (float):                Linear signal to noise power ratio.
+        n_samples (int):
+            Number of samples to be generated
+        sample_length (int):
+            Length of each sample
+        dictionary (numpy.ndarray):
+            The dictionary of centroids used to generate the samples.
+        n_centroids_per_sample (int):
+            Number of centroids used to generate a sample.
+        scale (bool):
+            If True, scale the centroids with amplitudes drawn from
+            Y ~ Normal(mu, sigma^2). If False, don't scale the centroids.
+        sigma (float):
+            Standard deviation of Y
+        mu (float):
+            Mean of Y
+        snr (float):
+            Linear signal to noise power ratio.
+        rng (int, Generator instance, or None):
+            Random generator
 
     Returns:
         X (numpy.ndarray):              Matrix with a sample in each row.
-        kernel_indexes (numpy.ndarray): Indexes of the kernels.
-        time_shifts (numpy.ndarray):    Time shifts of the kernels.
-        amplitudes (numpy.ndarray):     Amplitudes to scale the kernels.
+        centroid_indexes (numpy.ndarray): Indexes of the centroids.
+        time_shifts (numpy.ndarray):    Time shifts of the centroids.
+        amplitudes (numpy.ndarray):     Amplitudes to scale the centroids.
 
     Shapes:
-        dictionary:     (`n_kernels`, `kernel_length`)
+        dictionary:     (`n_centroids`, `centroid_length`)
         X:              (`n_samples`, `sample_length`)
-        kernel_indexes: (`n_samples`, `n_kernels_per_sample`)
-        time_shifts:    (`n_samples`, `n_kernels_per_sample`)
-        amplitudes:     (`n_samples`, `n_kernels_per_sample`)
-        """
+        centroid_indexes: (`n_samples`, `n_centroids_per_sample`)
+        time_shifts:    (`n_samples`, `n_centroids_per_sample`)
+        amplitudes:     (`n_samples`, `n_centroids_per_sample`)
+    """
 
-    n_kernels, kernel_length = dictionary.shape
-    kernel_indexes = np.random.randint(0, n_kernels,
-                                       (n_samples, n_kernels_per_sample))
-    time_shifts = np.random.randint(0, sample_length-kernel_length+1,
-                                    (n_samples, n_kernels_per_sample))
+    rng = check_rng(rng)
+
+    n_centroids, centroid_length = dictionary.shape
+    centroid_indexes = rng.integers(
+        0, n_centroids, (n_samples, n_centroids_per_sample))
+    time_shifts = rng.integers(
+        0, sample_length-centroid_length+1, (n_samples, n_centroids_per_sample))
 
     if scale:
-        amplitudes = sigma * np.random.randn(n_samples, n_kernels_per_sample)\
-                     + mu
+        amplitudes = sigma * \
+            rng.standard_normal(size=(n_samples, n_centroids_per_sample)) + mu
     else:
-        amplitudes = np.ones((n_samples, n_kernels_per_sample))
+        amplitudes = np.ones((n_samples, n_centroids_per_sample))
 
-    padded_dictionary = np.pad(dictionary,
-                               [(0, 0), (0, sample_length-kernel_length)],
-                               mode='constant')
-    chosen_atoms = padded_dictionary[kernel_indexes]
+    padded_dictionary = np.pad(
+        dictionary, [(0, 0), (0, sample_length-centroid_length)],
+        mode='constant')
+    chosen_atoms = padded_dictionary[centroid_indexes]
 
-    rolled_kernels = roll_rows_of_3D_matrix(chosen_atoms, time_shifts)
-    X = np.einsum('ij,ijk->ik', amplitudes, rolled_kernels)
+    rolled_centroids = roll_rows_of_3D_matrix(chosen_atoms, time_shifts)
+    X = np.einsum('ij,ijk->ik', amplitudes, rolled_centroids)
     X = add_noise(X, snr)
 
-    return X, kernel_indexes, time_shifts, amplitudes
+    return X, centroid_indexes, time_shifts, amplitudes
 
 
 def sampleIDs(name_prefix, data_size, num_training_samples,

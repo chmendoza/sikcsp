@@ -4,6 +4,8 @@ Extensions to numpy functions
 
 import numpy as np
 
+from shift_kmeans.utils import check_rng
+
 def roll_rows(array, shift):
     """
     Roll each row of `array` independently
@@ -72,16 +74,16 @@ def roll_rows_of_3D_matrix(a, shift):
     n_2D_matrices = a.shape[0]
     n_rows = a.shape[1]
     n_cols = a.shape[2]
-    idx = np.reshape(np.arange(n_2D_matrices),[-1,1,1])
-    idy = np.reshape(np.arange(n_rows),[1,-1,1])
-    shift = shift[:,:,None]
+    idx = np.reshape(np.arange(n_2D_matrices), [-1, 1, 1])
+    idy = np.reshape(np.arange(n_rows), [1, -1, 1])
+    shift = shift[:, :, None]
     idz = np.arange(n_cols)
     idz = (idz - shift) % n_cols
 
-    return a[idx,idy,idz]
+    return a[idx, idy, idz]
 
 
-def add_noise(X, snr):
+def add_noise(X, snr, rng=None):
     """
     Add Gaussian noise to `X` to achieve the given `snr`
 
@@ -89,17 +91,20 @@ def add_noise(X, snr):
     the unperturbed `X` and the noise is equal to `snr`.
 
     Args:
-        X (numpy.ndarray):  Unperturbed data matrix, with samples in its rows.
-        snr (float):        Signal to noise ratio
+        X (numpy.ndarray):
+            Unperturbed data matrix, with samples in its rows.
+        snr (float):
+            Signal to noise ratio
+        rng (int, Generator instance, None):
+            Random generator
     """
 
-    noise = np.random.normal(0, 1, X.shape)
+    rng = check_rng(rng)
+
+    noise = rng.normal(0, 1, X.shape)
     noise_norm = np.linalg.norm(noise, axis=1, keepdims=True)
     X_norm = np.linalg.norm(X, axis=1, keepdims=True)
     noise = noise * X_norm / (np.sqrt(snr) * noise_norm)
     X = X + noise
 
     return X
-
-
-

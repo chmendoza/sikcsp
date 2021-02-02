@@ -3,10 +3,30 @@ Utils functions
 """
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
+import numbers
 
-from sklearn.utils import check_random_state
+def check_rng(seed):
+    """Turn seed into a np.random.Generator instance
 
-def _pick_windows_from_strided(X, n_windows, window_length, random_state):
+    Parameters
+    ----------
+    seed : None, int or instance of Generator
+        If seed is None, return the Generator using the OS entropy.
+        If seed is an int, return a new Generator instance seeded with seed.
+        If seed is already a Generator instance, return it.
+        Otherwise raise ValueError.
+    """
+    if seed is None:
+        return np.random.default_rng()
+    if isinstance(seed, numbers.Integral):
+        return np.random.default_rng(seed)
+    if isinstance(seed, np.random.Generator):
+        return seed
+
+    raise ValueError('%r cannot be used to seed a numpy.random.Generator'
+                     ' instance' % seed)
+
+def _pick_windows_from_strided(X, n_windows, window_length, rng):
     """
     See https://stackoverflow.com/a/47983009/4292705
     """
@@ -17,7 +37,7 @@ def _pick_windows_from_strided(X, n_windows, window_length, random_state):
 
     # Create `n_windows` unique random indexes for each sample
     windows_ids = np.tile(np.arange(n_offsets), (n_samples, 1))
-    windows_ids = np.apply_along_axis(random_state.choice, 1, windows_ids,
+    windows_ids = np.apply_along_axis(rng.choice, 1, windows_ids,
                                       size=n_windows, replace=False)
 
     # Find all possible `n_offsets` windows for each sample
@@ -32,7 +52,7 @@ def _pick_windows_from_strided(X, n_windows, window_length, random_state):
     return windows
 
 
-def _pick_windows_with_integer_indexing(X, n_windows, window_length, random_state):
+def _pick_windows_with_integer_indexing(X, n_windows, window_length, rng):
     """
     See https://stackoverflow.com/a/47982961/4292705
     """
@@ -42,7 +62,7 @@ def _pick_windows_with_integer_indexing(X, n_windows, window_length, random_stat
 
     # Create offsets, the start index of each window
     offsets = np.tile(np.arange(n_offsets), (n_samples, 1))
-    chosen_offsets = np.apply_along_axis(random_state.choice, 1, offsets,
+    chosen_offsets = np.apply_along_axis(rng.choice, 1, offsets,
                                          size=n_windows, replace=False)
 
     # Build index of columns according to offsets
@@ -54,7 +74,7 @@ def _pick_windows_with_integer_indexing(X, n_windows, window_length, random_stat
 
     return windows
 
-def pick_random_windows(X, n_windows, window_length, random_state=None):
+def pick_random_windows(X, n_windows, window_length, rng=None):
     """
     It picks windows randomly from each row of `X`.
 
@@ -67,7 +87,7 @@ def pick_random_windows(X, n_windows, window_length, random_state=None):
         each window is different.
     window_length (int):
         Lenght of the window
-    random_state (int, RandomState instance, or None):
+    rng (int, Generator instance, or None):
         Determines random number generation for picking the windows. Use an
         int to make the randomness deterministic.
 
@@ -91,11 +111,55 @@ def pick_random_windows(X, n_windows, window_length, random_state=None):
     peak_memory_use = n_samples * n_offsets * window_length \
                       * n_bytes_per_element
 
-    random_state = check_random_state(random_state)
+    rng = check_rng(rng)
 
     if peak_memory_use < 1 * 1e9: # 2 GB
         return _pick_windows_from_strided(X, n_windows, window_length,
-                                          random_state)
+                                          rng)
     else:
         return _pick_windows_with_integer_indexing(X, n_windows, window_length,
-                                                   random_state)
+                                                   rng)
+
+
+def pick_windows(array, window_length, offset='all'):
+    """
+    Pick windows independently for each row of a 2D array
+
+    Parameters
+    ----------
+    array (numpy.ndarray):
+        array whose rows are to be windowed
+    window_length (int):
+        Length of the window
+    offset (numpy.ndarray or 'all'):
+        offset[i] has the offsets, or starting indexes, for the
+        windows that are to be extracted from array[i]. If 'all', return all
+        possible windows.
+
+    Returns
+    -------
+    windows (numpy.ndarray):
+        array with the windows
+
+    Shapes
+    ------
+    array: (n_rows, n_cols):
+    offset: (n_rows, n_offsets)
+    windows:    (n_rows, n_offsets, window_length)
+    """
+
+    n_rows, n_cols = array.shape
+
+    if isinstance(offset, str) and offset == 'all':
+        n_offsets = n_cols - window_length + 1
+        offset = np.arange(n_offsets).reshape((1, n_offsets))
+        offset = np.repeat(offset, n_rows, axis=0)
+
+    # After broadcasting, col_id.shape=(n_rows,n_offsets,window_length)
+    offset = np.expand_dims(offset, axis=-1)
+    col_id = np.arange(window_length).reshape((1, 1, window_length))
+    col_id = col_id + offset
+
+    row_id = np.arange(n_rows).reshape(n_rows, 1, 1)
+
+    return array[row_id, col_id]

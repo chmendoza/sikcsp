@@ -1,92 +1,116 @@
 """
 Numpy ans scikit-learn wrappers
 """
+import sys
 import numpy as np
 
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.metrics.pairwise import pairwise_distances_argmin_min
+from sklearn.utils.extmath import row_norms
 
-from shift_kmeans.datasets import utils
 
-def shift_invariant_euclidean_distances(kernels, X, X_norm_squared, squared=False):
+def si_euclidean_distances(centroids, X, X_norm_squared,
+                           squared=False):
     """
     Shift-invariant wrapper of euclidean_distances()
 
-    Rows of `kernels` are shorter than rows of X. Rows of `kernels` are
-    zero-padded an rolled to compute the distances to the rows of `X` at each
-    shift.
+    Rows of `centroids` are shorter than rows of X. Rows of `X` are
+    windowed at each shift to compute the distances to the rows of `centroids`.
 
     Parameters
     ----------
-    kernels (numpy.ndarray):
-        kernels[i] is a kernel with length `kernel_length`.
+    centroids (numpy.ndarray):
+        centroids[i] is a centroid with length `centroid_length`. Shape: (n_centroids, centroid_length)
     X (numpy.ndarray):
-        X[i] is a sample with length `n_features`.
-        `kernel_length` < `n_features`.
+        X[i] is a sample with length `n_features`. Shape: (n_samples, n_features).
+        `centroid_length` < `n_features`.
     X_norm_squared (numpy.ndarray):
-        Precomputed squared euclidean norm of rows of `X`.
+        Precomputed squared euclidean norm of rows of windowed `X`. Shape: (n_shifts, n_samples).
     squared (bool):
         If True, the euclidean distance is squared.
 
     Returns
     -------
     distances (numpy.ndarray):
-        distances[i][j][k] is the euclidean distance from kernels[i], shifted
-        `j` positions, to sample X[k].
+        distances[i][j][k] is the euclidean distance from centroids[j] to the
+        windowed sample X[k, i:i+centroid_length].
     """
 
-    n_kernels, kernel_length = kernels.shape
+    n_centroids, centroid_length = centroids.shape
     n_samples, n_features = X.shape
-    n_shifts = n_features - kernel_length + 1
+    n_shifts = n_features - centroid_length + 1
 
-    # Pad and roll the kernels
-    kernels_padded = np.pad(kernels, [(0, 0), (0, n_shifts-1)], mode='constant')
-    shift = np.tile(np.arange(n_shifts), (n_kernels, 1))
-    kernels_rolled = utils.roll_rows(kernels_padded, shift)
+    distances = np.empty((n_shifts, n_centroids, n_samples))
 
-    distances = np.empty((n_kernels, n_shifts, n_samples))
-
-    # Use euclidean_distances() to find the distance from all the rolled
-    # versions of each kernel to all the samples in X
-    for kernel in np.arange(n_kernels):
-        distances[kernel] = euclidean_distances(kernels_rolled[kernel], X,
-                                                X_norm_squared, squared=True)
+    # Use euclidean_distances() to find the distance from each windowed X to
+    # all the centroids
+    for shift in range(n_shifts):
+        distances[shift] = euclidean_distances(
+            X=centroids,
+            Y=X[:, shift:shift+centroid_length],
+            Y_norm_squared=X_norm_squared[shift],
+            squared=True)
 
     return distances
 
-def shift_invariant_pairwise_distances_argmin_min(X, kernels, x_squared_norms):
+
+def si_pairwise_distances_argmin_min(X, centroids, metric, x_squared_norms):
     """
     Shift-invariant wrapper of http://bit.ly/argmin_min_sklearn
     """
 
    # euclidean_distances() requires 2D
-    if x_squared_norms.ndim == 1:
-        x_squared_norms = x_squared_norms.reshape(1,-1)
+    if metric == 'euclidean' and x_squared_norms.ndim == 1:
+        x_squared_norms = x_squared_norms.reshape(1, -1)
+    if centroids.ndim == 1:
+        centroids = centroids.reshape(1, -1)
 
     n_samples, sample_length = X.shape
-    n_kernels, kernel_length = kernels.shape
-    n_shifts = sample_length - kernel_length + 1
+    centroid_length = centroids.shape[1]
+    n_shifts = sample_length - centroid_length + 1
 
-    metric_kwargs = {'squared': True, 'X_norm_squared': x_squared_norms}
+    best_labels = np.empty((n_shifts, n_samples), dtype=np.int)
+    best_distances = np.empty((n_shifts, n_samples))
 
-    # Assume n_shifts <= 2**16 = 65536
-    best_shifts = np.empty((n_kernels, n_samples), dtype=np.uint16)
-    best_distances = np.empty((n_kernels, n_samples))
+    if metric == 'euclidean':
+        for shift in range(n_shifts):
+            # A bug on sklearn enforces a 2D array
+            XX = x_squared_norms[shift].reshape((n_samples, 1))
+            best_labels[shift], best_distances[shift] = \
+                pairwise_distances_argmin_min(
+                    X=X[:, shift:shift+centroid_length],
+                    Y=centroids,
+                    metric_kwargs={'squared': True,
+                                   'X_norm_squared': XX})
+    elif metric == 'cosine':
+        for shift in range(n_shifts):
+            best_labels[shift], best_distances[shift] = \
+                pairwise_distances_argmin_min(
+                    X=X[:, shift:shift+centroid_length],
+                    Y=centroids,
+                    metric=metric)
+    else:
+        sys.exit('%s metric not implemented' % metric)
 
-    # Pad and roll the kernels
-    padded_kernels = np.pad(kernels, [(0, 0), (0, n_shifts-1)],
-                            mode='constant')
-    shifts = np.tile(np.arange(n_shifts, dtype=np.int), (n_kernels, 1))
-    rolled_kernels = utils.roll_rows(padded_kernels, shifts)
+    # For each sample, find best shift
+    best_shifts = np.argmin(best_distances, axis=0)
+    best_labels = best_labels[best_shifts, np.arange(n_samples)]
+    best_distances = best_distances[best_shifts, np.arange(n_samples)]
 
-    for kernel_id, rolled_kernel in enumerate(rolled_kernels):
-        best_shifts[kernel_id], best_distances[kernel_id] = \
-            pairwise_distances_argmin_min(
-                X=X, Y=rolled_kernel, metric_kwargs=metric_kwargs)
+    return best_labels, best_shifts, best_distances
 
-    # For each sample, find closest shifted kernel
-    labels = np.argmin(best_distances, axis=0)
-    best_shifts = best_shifts[labels, np.arange(n_samples)]
-    best_distances = np.min(best_distances, axis=0)
 
-    return labels, best_shifts, best_distances
+def si_row_norms(X, centroid_length, squared=False):
+    """
+    Shift-invariant wrapper of row_norms()
+    """
+
+    n_samples, sample_length = X.shape
+    n_shifts = sample_length - centroid_length + 1
+
+    x_squared_norms = np.empty((n_shifts, n_samples))
+    for shift in range(n_shifts):
+        x_squared_norms[shift] = row_norms(
+            X[:, shift:shift+centroid_length], squared=squared)
+
+    return x_squared_norms
