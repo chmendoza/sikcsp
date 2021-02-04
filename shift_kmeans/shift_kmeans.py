@@ -338,9 +338,12 @@ def shift_invariant_k_means(X, n_clusters, centroid_length, metric='euclidean',\
         x_squared_norms = wrappers.si_row_norms(X, centroid_length,
                                                 squared=True)
 
-    seeds = rng.integers(0,np.iinfo(np.int32).max, size=n_init)
+    
+    ss = rng.bit_generator._seed_seq
+    child_seeds = ss.spawn(n_init)
+    streams = [np.random.default_rng(s) for s in child_seeds]    
 
-    for seed in seeds:
+    for seed in streams:
         # run a shift-invariant k-means once
         centroids, labels, shifts, distances, inertia, n_iter_ = si_kmeans_single(
             X, n_clusters, centroid_length, metric=metric, init=init, max_iter=max_iter, tol=tol, x_squared_norms=x_squared_norms, rng=seed, verbose=verbose)
