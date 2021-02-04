@@ -22,6 +22,8 @@ parser.add_argument("-f", "--config-file", dest="confpath",
                     help="YAML configuration file")
 args = parser.parse_args()
 
+os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
+
 #%% Read paramaters
 # confdir = '/home/cmendoza/MEGA/Research/software/shift_kmeans/kcsp/config'
 # confname = 'crossval_kcsp_dmonte7_band2_regular_k8-64_P30-40.yaml'
