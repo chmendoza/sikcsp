@@ -22,11 +22,6 @@ parser.add_argument("-f", "--config-file", dest="confpath",
                     help="YAML configuration file")
 args = parser.parse_args()
 
-#os.environ['SLURM_NTASKS_PER_NODE'] = '4'
-# Start timer
-tic = time.perf_counter()
-
-
 #%% Read paramaters
 # confdir = '/home/cmendoza/MEGA/Research/software/shift_kmeans/kcsp/config'
 # confname = 'crossval_kcsp_dmonte7_band2_regular_k8-64_P30-40.yaml'
@@ -41,6 +36,8 @@ print(yaml.dump(params, sort_keys=False))
 print('=======================================')
 n_folds = params['n_folds']
 wpath = params['data']['Wpath']
+dfname = params['data']['dfname']
+rfname = params['data']['rfname']
 patient_dir = params['data']['patient_dir']
 winlen = params['data']['winlen']
 metric = params['algo']['metric']
@@ -67,10 +64,11 @@ W = utils.loadmat73(wpath, 'W')
 i_set = 0  # 0: training, 1: testing
 conditions = ['preictal', 'interictal']
 X = [0]*2
+tic = time.perf_counter()
 for i_condition, condition in enumerate(conditions):
     # file names and start indices of preictal windows
     dirpath = os.path.join(patient_dir, condition)
-    fpath = os.path.join(dirpath, 'monte7_data_split_for_trainTest.mat')
+    fpath = os.path.join(dirpath, dfname)
     i_start = utils.loadmat73(fpath, 'i_start')
     i_start = utils.apply2list(i_start, np.squeeze)
     i_start = utils.apply2list(i_start, minusone)
@@ -81,6 +79,8 @@ for i_condition, condition in enumerate(conditions):
     X[i_condition] = utils.getCSPdata(
         dirpath, dfname, i_start, winlen, W[:, i_condition])
 
+toc = time.perf_counter()
+print("Data gathered and filtered after %0.4f seconds" % toc - tic)
 #%% Run shift-invariant k-means in a k-fold cross-validation
 N1, N2 = X[0].shape[0], X[1].shape[0]
 misclass = np.empty(n_folds)
@@ -90,8 +90,9 @@ kfold2 = utils.kfold_split(N2, n_folds, shuffle=True, rng=rng)
 
 ## Cross-validation loop
 i_fold = 0
-for (train1, test1), (train2, test2) in zip(kfold1, kfold2):    
-    
+for (train1, test1), (train2, test2) in zip(kfold1, kfold2):
+
+    tic = time.perf_counter()    
     print('Fold %d out of %d' % (i_fold+1, n_folds))
     # Training    
     C1, nu1, tau1, d1, sumd1, n_iter1 =\
@@ -130,8 +131,12 @@ for (train1, test1), (train2, test2) in zip(kfold1, kfold2):
     misclass[i_fold] /= (N1 + N2)
     i_fold += 1
 
+    toc = time.perf_counter()
+    print("Fold processed after %0.4f seconds" % toc - tic)
+
 with np.printoptions(precision=3, suppress=True):
     print('Misclassification:\n', misclass)
 
-toc = time.perf_counter()
-print(f"Finished after {toc - tic:0.4f} seconds")
+rpath = os.path.join(patient_dir, rfname)
+with open(rpath, 'r') as f:
+    np.save(f, misclass)
