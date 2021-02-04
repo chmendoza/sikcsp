@@ -1,7 +1,7 @@
 import os
 import h5py
 import numpy as np
-import multiprocessing, logging
+import multiprocessing
 import numbers
 
 def loadmat73(fpath, varname):
@@ -138,7 +138,7 @@ def getCSPdata(dirpath, dfname, i_start, winlen, W):
 
     X = np.empty((n_win.sum(), n_csp, winlen)).squeeze()
 
-    n_proc = int(os.environ['SLURM_NTASKS_PER_NODE'])
+    n_proc = int(os.environ['SLURM_CPUS_PER_TASK'])
     chunksize = 1    
     
     with multiprocessing.Pool(n_proc) as pool:
