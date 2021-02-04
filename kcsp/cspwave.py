@@ -82,7 +82,7 @@ for i_condition, condition in enumerate(conditions):
         dirpath, dfnames, i_start, winlen, W[:, i_condition])
 
 toc = time.perf_counter()
-print("Data gathered and filtered after %0.4f seconds" % toc - tic)
+print("Data gathered and filtered after %0.4f seconds" % (toc - tic))
 #%% Run shift-invariant k-means in a k-fold cross-validation
 N1, N2 = X[0].shape[0], X[1].shape[0]
 misclass = np.empty(n_folds)
@@ -134,7 +134,7 @@ for (train1, test1), (train2, test2) in zip(kfold1, kfold2):
     i_fold += 1
 
     toc = time.perf_counter()
-    print("Fold processed after %0.4f seconds" % toc - tic)
+    print("Fold processed after %0.4f seconds" % (toc - tic))
 
 with np.printoptions(precision=3, suppress=True):
     print('Misclassification:\n', misclass)
