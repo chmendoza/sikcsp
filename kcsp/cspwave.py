@@ -75,11 +75,11 @@ for i_condition, condition in enumerate(conditions):
     i_start = utils.apply2list(i_start, np.squeeze)
     i_start = utils.apply2list(i_start, minusone)
     i_start = [i_start[ii][i_set] for ii in range(len(i_start))]
-    dfname = utils.loadmat73(fpath, 'fnames')    
+    dfnames = utils.loadmat73(fpath, 'fnames')    
 
     # Extract data and apply CSP filter
     X[i_condition] = utils.getCSPdata(
-        dirpath, dfname, i_start, winlen, W[:, i_condition])
+        dirpath, dfnames, i_start, winlen, W[:, i_condition])
 
 toc = time.perf_counter()
 print("Data gathered and filtered after %0.4f seconds" % toc - tic)
