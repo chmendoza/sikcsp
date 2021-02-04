@@ -19,6 +19,7 @@ def check_rng(seed):
     if seed is None:
         return np.random.default_rng()
     if isinstance(seed, numbers.Integral):
+        seed = np.random.SeedSequence(seed)
         return np.random.default_rng(seed)
     if isinstance(seed, np.random.Generator):
         return seed
