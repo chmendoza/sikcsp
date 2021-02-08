@@ -36,7 +36,9 @@ with open(confpath, 'r') as yamlfile:
 print('=========== Configuration =============')
 print(yaml.dump(params, sort_keys=False))
 print('=======================================')
-n_folds = params['n_folds']
+n_folds = params['crossval']['n_folds']
+i_fold = params['crossval']['i_fold']
+ffname = params['crossval']['foldfile']
 wpath = params['data']['Wpath']
 dfname = params['data']['dfname']
 rfname = params['data']['rfname']
@@ -47,17 +49,7 @@ init = params['algo']['init']
 n_runs = params['algo']['n_runs']
 k1, k2 = params['algo']['n_clusters']
 P1, P2 = params['algo']['centroid_length']
-
-#%% Random generator
-init_seed = params['init_seed']
-seed = np.random.SeedSequence(init_seed)
-print('Initial random seed: %s' % seed.entropy)
-rng = np.random.default_rng(seed)
-if init_seed is None:
-    print('Saving initial seed to disk...')
-    params['init_seed'] = seed.entropy
-    with open(confpath, 'w') as yamfile:
-        yaml.dump(params, yamfile, sort_keys=False)
+init_seed = params['algo']['rng_seed']
 
 #%% Get the CSP filters
 W = utils.loadmat73(wpath, 'W')
@@ -83,59 +75,65 @@ for i_condition, condition in enumerate(conditions):
 
 toc = time.perf_counter()
 print("Data gathered and filtered after %0.4f seconds" % (toc - tic))
+
 #%% Run shift-invariant k-means in a k-fold cross-validation
 N1, N2 = X[0].shape[0], X[1].shape[0]
-misclass = np.empty(n_folds)
+misclass = 0
 
-kfold1 = utils.kfold_split(N1, n_folds, shuffle=True, rng=rng)
-kfold2 = utils.kfold_split(N2, n_folds, shuffle=True, rng=rng)
+## Get indices of one cross-validation fold
+ffpath = os.path.join(patient_dir, ffname)
+with open(ffpath, 'rb') as foldfile:
+    indices = np.load(foldfile)
+train1, test1 = indices['train1'], indices['test1']
+train2, test2 = indices['train2'], indices['test2']
 
-## Cross-validation loop
-i_fold = 0
-for (train1, test1), (train2, test2) in zip(kfold1, kfold2):
+#%% Random generator
+seed = np.random.SeedSequence(init_seed)
+print('Initial random seed: %s' % seed.entropy)
+rng = np.random.default_rng(seed)
+if init_seed is None:
+    print('Saving initial seed to disk...')
+    params['init_seed'] = seed.entropy
+    with open(confpath, 'w') as yamfile:
+        yaml.dump(params, yamfile, sort_keys=False)
 
-    tic = time.perf_counter()    
-    print('Fold %d out of %d' % (i_fold+1, n_folds))
-    # Training
-    C1, nu1, tau1, d1, sumd1, n_iter1 = sikmeans.shift_invariant_k_means(\
-        X[0][train1], k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
+tic = time.perf_counter()
+print('Fold %d out of %d' % (i_fold+1, n_folds))
+# Training
+C1, nu1, tau1, d1, sumd1, n_iter1 = sikmeans.shift_invariant_k_means(\
+    X[0][train1], k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng, erbose=True)
+C2, nu2, tau2, d2, sumd2, n_iter2 = sikmeans.shift_invariant_k_means(\
+    X[1][train2], k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng, erbose=True)
 
-    C2, nu2, tau2, d2, sumd2, n_iter2 = sikmeans.shift_invariant_k_means(\
-        X[1][train2], k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
+# Estimate posterior
+nu = bayes.cluster_assignment(
+    X[0][train1], X[1][train2], C1, C2, metric=metric)
+p_J = bayes.likelihood(nu, N=(N1, N2), k=(k1, k2))  # (2,k1,k2)
+p_S = np.zeros((2, 1, 1))
+p_S[0] = N1/(N1+N2)
+p_S[1] = N2/(N1+N2)
+posterior = p_S * p_J  # ~ P(S=s | J1 = j, J2 = l)
 
-    
+# Compute misclassification rate using MAP
+N1, N2 = X[0][test1].shape[0], X[1][test2].shape[0]
+nu = bayes.cluster_assignment(
+    X[0][test1], X[1][test2], C1, C2, metric=metric)
+# Posterior when data (cluster assignments) come from class s=1
+# nu[0] are cluster assignments using C1
+# nu[1] are cluster assignments using C2
+pp1 = posterior[:, nu[0], nu[1]]  # (2, N1).
+pp2 = posterior[:, nu[2], nu[3]]
+# for each pair assignment pair (j,l), find the value of s (row index) with AP. Row 0 is class 1.
+I1 = np.argmax(pp1, axis=0)
+I2 = np.argmax(pp2, axis=0)
+misclass = np.sum(I1 != 0)
+misclass += np.sum(I2 != 1)
+misclass /= (N1 + N2)
 
-    # Estimate posterior
-    nu = bayes.cluster_assignment(
-        X[0][train1], X[1][train2], C1, C2, metric=metric)
-    p_J = bayes.likelihood(nu, N=(N1, N2), k=(k1, k2))  # (2,k1,k2)
-    p_S = np.zeros((2, 1, 1))
-    p_S[0] = N1/(N1+N2)
-    p_S[1] = N2/(N1+N2)
-    posterior = p_S * p_J  # ~ P(S=s | J1 = j, J2 = l)
 
-    # Compute misclassification rate using MAP
-    N1, N2 = X[0][test1].shape[0], X[1][test2].shape[0]
-    nu = bayes.cluster_assignment(
-        X[0][test1], X[1][test2], C1, C2, metric=metric)
-    # Posterior when data (cluster assignments) come from class s=1
-    # nu[0] are cluster assignments using C1
-    # nu[1] are cluster assignments using C2
-    pp1 = posterior[:, nu[0], nu[1]]  # (2, N1).
-    pp2 = posterior[:, nu[2], nu[3]]
-    # for each pair assignment pair (j,l), find the value of s (row index) with MAP. Row 0 is class 1.
-    I1 = np.argmax(pp1, axis=0)
-    I2 = np.argmax(pp2, axis=0)
-    misclass[i_fold] = np.sum(I1 != 0)
-    misclass[i_fold] += np.sum(I2 != 1)
-    misclass[i_fold] /= (N1 + N2)
-    i_fold += 1
-
-    toc = time.perf_counter()
-    print("Fold processed after %0.4f seconds" % (toc - tic))
-
-with np.printoptions(precision=3, suppress=True):
-    print('Misclassification:\n', misclass)
+toc = time.perf_counter()
+print("Fold processed after %0.4f seconds" % (toc - tic))
+print('Misclassification: %.3f' % misclass)
 
 rpath = os.path.join(patient_dir, rfname)
 with open(rpath, 'r') as f:
