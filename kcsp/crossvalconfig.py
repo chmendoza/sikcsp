@@ -14,12 +14,11 @@ from kcsp import utils
 params = dict.fromkeys(['crossval', 'data', 'algo'])
 params['crossval'] = dict.fromkeys(['n_folds', 'i_fold', 'fpath', 'rng_seed'])
 params['data'] = dict.fromkeys(
-    ['patient_dir', 'Wpath', 'dfname', 'rfname', 'winlen', 'n_samples'])
+    ['patient_dir', 'Wpath', 'dfname', 'rfname', 'winlen'])
 params['algo'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length', 'rng_seed'])
 
 n_folds = 10
 params['crossval']['n_folds'] = n_folds
-params['init_seed'] = None
 
 patients = ['HUP070', 'HUP078']
 data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
