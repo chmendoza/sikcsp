@@ -99,10 +99,10 @@ if init_seed is None:
 tic = time.perf_counter()
 print('Fold %d out of %d' % (i_fold+1, n_folds))
 # Training
-C1, nu1, tau1, d1, sumd1, n_iter1 = sikmeans.shift_invariant_k_means(\
-    X[0][train1], k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng, erbose=True)
-C2, nu2, tau2, d2, sumd2, n_iter2 = sikmeans.shift_invariant_k_means(\
-    X[1][train2], k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng, erbose=True)
+C1, nu1, tau1, d1, sumd1, n_iter1 = sikmeans.shift_invariant_k_means(
+    X[0][train1], k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
+C2, nu2, tau2, d2, sumd2, n_iter2 = sikmeans.shift_invariant_k_means(
+    X[1][train2], k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
 
 # Estimate posterior
 nu = bayes.cluster_assignment(
