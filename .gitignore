@@ -1,6 +1,5 @@
 shift_kmeans_cupy/
 .*
-*config*
 __pycache__/
 *.py[cod]
 *.swp
