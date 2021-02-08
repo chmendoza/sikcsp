@@ -12,7 +12,7 @@ sys.path.insert(0,
 from kcsp import utils
 
 params = dict.fromkeys(['crossval', 'data', 'algo'])
-params['crossval'] = dict.fromkeys('n_folds', 'i_fold', 'fpath', 'rng_seed')
+params['crossval'] = dict.fromkeys(['n_folds', 'i_fold', 'fpath', 'rng_seed'])
 params['data'] = dict.fromkeys(
     ['patient_dir', 'Wpath', 'dfname', 'rfname', 'winlen', 'n_samples'])
 params['algo'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length', 'rng_seed'])
