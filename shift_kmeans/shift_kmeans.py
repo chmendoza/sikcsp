@@ -285,7 +285,7 @@ def shift_invariant_k_means(X, n_clusters, centroid_length, metric='euclidean',\
         call signature:
         centroids, shifts = init(
              X, n_clusters, centroid_length, rng, **kwargs).
-        rng must be a RandomState instance.
+        rng must be a Generator instance.
     n_init (int):
         The number of times the algorithm is run with different centroid seeds.
         The final results would be from the iteration where the inertia is the
