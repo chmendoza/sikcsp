@@ -23,7 +23,7 @@ params['init_seed'] = None
 
 patients = ['HUP070', 'HUP078']
 data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
-confdir = '~/sw/shift_kmeans/kcsp/config'
+confdir = '/home/1420/sw/shift_kmeans/kcsp/config'
 methods = ['regular', 'betadiv', 'max-sliced-Bures']
 method = methods[0]
 
