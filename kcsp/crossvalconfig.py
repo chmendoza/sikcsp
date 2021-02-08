@@ -12,7 +12,8 @@ sys.path.insert(0,
 from kcsp import utils
 
 params = dict.fromkeys(['crossval', 'data', 'algo'])
-params['crossval'] = dict.fromkeys(['n_folds', 'i_fold', 'fpath', 'rng_seed'])
+params['crossval'] = dict.fromkeys(
+    ['n_folds', 'i_fold', 'foldfile', 'rng_seed'])
 params['data'] = dict.fromkeys(
     ['patient_dir', 'Wpath', 'dfname', 'rfname', 'winlen'])
 params['algo'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length', 'rng_seed'])
@@ -68,7 +69,7 @@ for i_patient, patient in enumerate(patients):
                             train2=kfold2[i_fold][0],\
                             test2=kfold2[i_fold][1])
                                         
-                    params['crossval']['fpath'] = ffname
+                    params['crossval']['foldfile'] = ffname
                     Wfname = 'results_dmonte%d_trainTest_band%d_%s.mat' % (
                         d_monte, band, method)
                     dfname = 'monte%d_data_split_for_trainTest.mat' % d_monte
