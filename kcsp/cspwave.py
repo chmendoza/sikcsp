@@ -82,10 +82,9 @@ misclass = 0
 
 ## Get indices of one cross-validation fold
 ffpath = os.path.join(patient_dir, ffname)
-with open(ffpath, 'rb') as foldfile:
-    indices = np.load(foldfile)
-train1, test1 = indices['train1'], indices['test1']
-train2, test2 = indices['train2'], indices['test2']
+with np.load(ffpath) as indices:
+    train1, test1 = indices['train1'], indices['test1']
+    train2, test2 = indices['train2'], indices['test2']
 
 #%% Random generator
 seed = np.random.SeedSequence(init_seed)
