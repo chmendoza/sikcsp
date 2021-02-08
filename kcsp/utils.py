@@ -182,7 +182,8 @@ def check_rng(seed):
 def kfold_split(n_samples, n_folds, shuffle=None, rng=None):    
     indices = np.arange(n_samples)     
     if shuffle:
-        check_rng(rng).shuffle(indices)
+        rng = check_rng(rng)
+        rng.shuffle(indices)
     
     fold_sizes = np.full(n_folds, n_samples // n_folds, dtype=int)
     fold_sizes[:n_samples % n_folds] += 1
