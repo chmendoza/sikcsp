@@ -62,7 +62,7 @@ for i_patient, patient in enumerate(patients):
                         i_fold, d_monte, band, method, *k, *P)
                     ffpath = os.path.join(data_dir, patient, ffname)
                     # Save cross-validation indices
-                    with open(ffpath, 'w') as foldfile:
+                    with open(ffpath, 'wb') as foldfile:
                         np.savez(foldfile,\
                             train1=kfold1[i_fold][0],\
                             test1=kfold1[i_fold][1],\
