@@ -135,5 +135,5 @@ print("Fold processed after %0.4f seconds" % (toc - tic))
 print('Misclassification: %.3f' % misclass)
 
 rpath = os.path.join(patient_dir, rfname)
-with open(rpath, 'r') as f:
+with open(rpath, 'wb') as f:
     np.save(f, misclass)
