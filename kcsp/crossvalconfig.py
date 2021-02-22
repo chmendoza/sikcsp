@@ -30,7 +30,6 @@ method = methods[0]
 srate = 512 # Hz
 params['data']['winlen'] = srate * 1 # 1 second
 bands = [[3,6],[2,7]] # best bands with highest AUC (NER'21)
-d_monte = 7
 # Number of training samples per patient
 n_samples = [[6000, 116400], [4320, 130000]] #(preictal, interictal)
 
@@ -58,8 +57,8 @@ for i_patient, patient in enumerate(patients):
                 kfold2 = list(kfold2)
                 for i_fold in range(n_folds):
                     params['crossval']['i_fold'] = i_fold
-                    ffname = 'fold%d_dmonte%d_band%d_%s_k%d-%d_P%d-%d.npz' % (
-                        i_fold, d_monte, band, method, *k, *P)
+                    ffname = 'fold%d_band%d_%s_k%d-%d_P%d-%d.npz' % (
+                        i_fold, band, method, *k, *P)
                     ffpath = os.path.join(data_dir, patient, ffname)
                     # Save cross-validation indices
                     with open(ffpath, 'wb') as foldfile:
@@ -70,10 +69,10 @@ for i_patient, patient in enumerate(patients):
                             test2=kfold2[i_fold][1])
                                         
                     params['crossval']['foldfile'] = ffname
-                    Wfname = 'results_dmonte%d_trainTest_band%d_%s.mat' % (
-                        d_monte, band, method)
-                    dfname = 'monte%d_data_split_for_trainTest.mat' % d_monte
-                    rfname = 'misclass_fold%d_dmonte%d_band%d_%s_k%d-%d_P%d-%d.npy' % (i_fold, d_monte, band, method, *k, *P)
+                    Wfname = 'results_sikcsp_band%d_%s.mat' % (band, method)
+                    dfname = 'winlen-1min_start_gap-1sec.mat'
+                    rfname = 'misclass_fold%d_band%d_%s_k%d-%d_P%d-%d.npy' % (
+                        i_fold, band, method, *k, *P)
                     params['data']['rfname'] = rfname
                     params['data']['dfname'] = dfname
                     params['data']['Wpath'] = os.path.join(
@@ -85,7 +84,7 @@ for i_patient, patient in enumerate(patients):
                     # A different random seed is passed to the shift-invariant k-means algorithm on each fold
                     seed = np.random.SeedSequence()
                     params['algo']['rng_seed'] = seed.entropy
-                    confname = 'crossval_kcsp_fold%d_dmonte%d_band%d_%s_k%d-%d_P%d-%d.yaml' % (i_fold, d_monte, band, method, *k, *P)
+                    confname = 'crossval_kcsp_fold%d_band%d_%s_k%d-%d_P%d-%d.yaml' % (i_fold, band, method, *k, *P)
                     confpath = os.path.join(confdir, patient, confname)
                     with open(confpath, 'w') as yamlfile:
                         yaml.dump(params, yamlfile, sort_keys=False)
