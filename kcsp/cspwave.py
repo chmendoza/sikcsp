@@ -36,13 +36,14 @@ with open(confpath, 'r') as yamlfile:
 print('=========== Configuration =============')
 print(yaml.dump(params, sort_keys=False))
 print('=======================================')
-n_folds = params['Crossvalidation']['n_folds']
-i_fold = params['Crossvalidation']['i_fold']
-ffpath = params['Filenames']['Fold indices']
-wpath = params['Filenames']['CSP filters']
+patient_dir = params['Patient dir']
+foldname = params['Fold indices dir']
+ffname = params['Filenames']['Fold indices']
+wfname = params['Filenames']['CSP filters']
 dfname = params['Filenames']['Data indices']
 rfname = params['Filenames']['Results']
-patient_dir = params['Patient dir']
+n_folds = params['Crossvalidation']['n_folds']
+i_fold = params['Crossvalidation']['i_fold']
 winlen = params['Data']['Window length']
 seglen = params['Data']['Segment length']
 metric = params['Algorithm']['metric']
@@ -53,6 +54,7 @@ P1, P2 = params['Algorithm']['centroid_length']
 init_seed = params['Algorithm']['rng_seed']
 
 #%% Get the CSP filters
+wpath = os.path.join(patient_dir, wfname)
 W = utils.loadmat73(wpath, 'W')
 
 #%% Extract data and apply CSP filter
@@ -80,6 +82,7 @@ N1, N2 = X[0].shape[0], X[1].shape[0]
 misclass = 0
 
 ## Get indices of one cross-validation fold
+ffpath = os.path.join(patient_dir, foldname, ffname)
 with np.load(ffpath) as indices:
     train1, test1 = indices['train1'], indices['test1']
     train2, test2 = indices['train2'], indices['test2']

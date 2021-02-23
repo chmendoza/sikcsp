@@ -22,7 +22,7 @@ parser.add_argument("-P", "--centroid-lengths", type=int,
 args = parser.parse_args()
 
 params = dict.fromkeys(
-    ['Patient dir', 'Filenames', 'Crossvalidation', 'Data', 'Algorithm'])
+    ['Patient dir', 'Fold indices dir', 'Filenames', 'Crossvalidation', 'Data', 'Algorithm'])
 params['Filenames'] = dict.fromkeys(
     ['Fold indices', 'CSP filters', 'Data indices', 'Results'])
 params['Crossvalidation'] = dict.fromkeys(['n_folds', 'i_fold', 'rng_seed'])
@@ -58,6 +58,7 @@ for i_patient, patient in enumerate(patients):
     for band in bands[i_patient]:        
         for k in n_clusters:
             for P in centroid_lengths:
+                params['Patient dir'] = os.path.join(data_dir, patient)
                 # Use same initial seed for folds of same hyperparameter point since random genetator in gen_kfold.py must be the same to generate the k-fold partition.                                
                 seed = np.random.SeedSequence()
                 params['Crossvalidation']['rng_seed'] = seed.entropy
@@ -74,6 +75,7 @@ for i_patient, patient in enumerate(patients):
                 confsubdir = os.path.join(confdir, patient,\
                     'band%d_%s_k%d-%d_P%d-%d' % (band, method, *k, *P))
                 os.makedirs(confsubdir, exist_ok=True)
+                params['Fold indices dir'] = foldname
                 for i_fold in range(n_folds):
                     params['Crossvalidation']['i_fold'] = i_fold
                     ffname = 'fold%d.npz' % i_fold
@@ -94,7 +96,6 @@ for i_patient, patient in enumerate(patients):
                     params['Filenames']['Results'] = rfname
                     params['Filenames']['Data indices'] = dfname
                     params['Filenames']['CSP filters'] = Wfname
-                    params['Patient dir'] = os.path.join(data_dir, patient)
                     params['Algorithm']['n_clusters'] = k
                     params['Algorithm']['centroid_length'] = P
                     # A different random seed is passed to the shift-invariant k-means algorithm on each fold
