@@ -36,21 +36,21 @@ with open(confpath, 'r') as yamlfile:
 print('=========== Configuration =============')
 print(yaml.dump(params, sort_keys=False))
 print('=======================================')
-n_folds = params['crossval']['n_folds']
-i_fold = params['crossval']['i_fold']
-ffpath = params['crossval']['path2indices']
-wpath = params['data']['Wpath']
-dfname = params['data']['dfname']
-rfname = params['data']['rfname']
-patient_dir = params['data']['patient_dir']
-winlen = params['data']['window_len']
-seglen = params['data']['segment_len']
-metric = params['algo']['metric']
-init = params['algo']['init']
-n_runs = params['algo']['n_runs']
-k1, k2 = params['algo']['n_clusters']
-P1, P2 = params['algo']['centroid_length']
-init_seed = params['algo']['rng_seed']
+n_folds = params['Crossvalidation']['n_folds']
+i_fold = params['Crossvalidation']['i_fold']
+ffpath = params['Filenames']['Fold indices']
+wpath = params['Filenames']['CSP filters']
+dfname = params['Filenames']['Data indices']
+rfname = params['Filenames']['Results']
+patient_dir = params['Patient dir']
+winlen = params['Data']['Window length']
+seglen = params['Data']['Segment length']
+metric = params['Algorithm']['metric']
+init = params['Algorithm']['init']
+n_runs = params['Algorithm']['n_runs']
+k1, k2 = params['Algorithm']['n_clusters']
+P1, P2 = params['Algorithm']['centroid_length']
+init_seed = params['Algorithm']['rng_seed']
 
 #%% Get the CSP filters
 W = utils.loadmat73(wpath, 'W')
