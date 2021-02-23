@@ -89,7 +89,7 @@ def _get_CSPdata_single(i_epoch):
     fpath = os.path.join(dirpath, fname)
     n_chan = W.shape[0]
     epoch = loadmat73(fpath, 'epoch')
-    col = i_start[:, None, None] + np.arange(winlen).reshape(1, 1, -1)
+    col = np.reshape(i_start, (-1,1,1)) + np.arange(winlen).reshape(1, 1, -1)
     row = np.arange(n_chan).reshape(1, -1, 1)    
     windows = epoch[row, col]  # (n_win[i_epoch], n_chan, winlen)    
 
