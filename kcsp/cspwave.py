@@ -20,7 +20,12 @@ def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 parser = ArgumentParser()
 parser.add_argument("-f", "--config-file", dest="confpath",
                     help="YAML configuration file")
+
+parser.add_argument("-n", "--n-cpus", dest="n_cpus", type=int,
+                    default=1, help="Number of SLURM CPUS")
+
 args = parser.parse_args()
+n_cpus = args.n_cpus
 
 os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
 
@@ -73,7 +78,7 @@ for i_condition, condition in enumerate(conditions):
 
     # Extract data and apply CSP filter
     X[i_condition] = utils.getCSPdata(
-        dirpath, dfnames, i_start, seglen, W[:, i_condition])
+        dirpath, dfnames, i_start, seglen, W[:, i_condition], n_cpus=n_cpus)
 
 toc = time.perf_counter()
 print("Data gathered and filtered after %0.4f seconds" % (toc - tic))

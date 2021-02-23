@@ -95,7 +95,7 @@ def _get_CSPdata_single(i_epoch):
 
     return np.matmul(W.T, windows)
 
-def getCSPdata(dirpath, dfname, i_start, winlen, W):    
+def getCSPdata(dirpath, dfname, i_start, winlen, W, n_cpus=1):
     """
     Extract raw EEG windows and apply CSP filter
 
@@ -113,6 +113,8 @@ def getCSPdata(dirpath, dfname, i_start, winlen, W):
         Length of each window.
     W (double):
         A matrix whose columns are the spatial (CSP) filters. W.shape=(C, d),with d being the number of spatial filters.
+    n_cpus (int):
+        Number of SLURM CPUs to be used
 
     Returns
     -------
@@ -138,13 +140,16 @@ def getCSPdata(dirpath, dfname, i_start, winlen, W):
 
     X = np.empty((n_win.sum(), n_csp, winlen)).squeeze()
 
-    n_proc = int(os.environ['SLURM_CPUS_PER_TASK'])
-    chunksize = 1    
-    
-    with multiprocessing.Pool(n_proc) as pool:
-        imap_it = pool.imap(_get_CSPdata_single, range(n_epoch), chunksize)
-        for i_epoch, x in enumerate(imap_it):
+    chunksize = 1
+    if n_cpus == 1: # single process
+        for i_epoch in range(n_epoch):
+            x = _get_CSPdata_single(i_epoch)
             X[cumwin[i_epoch]:cumwin[i_epoch+1]] = x
+    else: # multiple processes
+        with multiprocessing.Pool(n_cpus) as pool:
+            imap_it = pool.imap(_get_CSPdata_single, range(n_epoch), chunksize)
+            for i_epoch, x in enumerate(imap_it):
+                X[cumwin[i_epoch]:cumwin[i_epoch+1]] = x
 
     if n_csp > 1:
         X = np.transpose(X, (1, 0, 2))
