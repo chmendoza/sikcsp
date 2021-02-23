@@ -2,6 +2,7 @@ import os, sys
 import yaml
 import itertools
 import numpy as np
+from argparse import ArgumentParser
 
 # Add path to package directory to access main module using absolute import
 sys.path.insert(0,
@@ -10,6 +11,15 @@ sys.path.insert(0,
 
 
 from kcsp import utils
+
+# Parse command-line arguments
+parser = ArgumentParser()
+parser.add_argument("-k", "--nclusters", dest="n_clusters",
+                    nargs='+', type=int, help="Number of clusters")
+parser.add_argument("-P", "--centroid-lengths", type=int,
+                    dest="centroid_lengths", nargs='+', 
+                    help="Length of cluster centroids")
+args = parser.parse_args()
 
 params = dict.fromkeys(['crossval', 'data', 'algo'])
 params['crossval'] = dict.fromkeys(
@@ -37,8 +47,8 @@ n_samples = [[98, 1886], [64, 1980]] #(preictal, interictal)
 params['algo']['metric'] = 'cosine'
 params['algo']['init'] = 'random-energy'
 params['algo']['n_runs'] = 3
-n_clusters = [4, 8, 16, 32, 64, 128]
-centroid_lengths = [30, 40, 60, 120, 200, 350]
+n_clusters = args.n_clusters
+centroid_lengths = args.centroid_lengths
 n_classes = 2
 n_clusters = list(itertools.product(n_clusters, repeat=n_classes))
 centroid_lengths = list(itertools.product(centroid_lengths, repeat=n_classes))
