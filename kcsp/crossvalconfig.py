@@ -66,7 +66,7 @@ for i_patient, patient in enumerate(patients):
                 kfold2 = utils.kfold_split(N2, n_folds, shuffle=True, rng=rng)
                 kfold1 = list(kfold1)
                 kfold2 = list(kfold2)
-                foldname = 'band%d_%s_k%d-%d_P%d-%d.npz' % (
+                foldname = 'band%d_%s_k%d-%d_P%d-%d' % (
                     band, method, *k, *P)
                 foldpath = os.path.join(data_dir, patient, foldname)
                 os.makedirs(foldpath, exist_ok=True)
