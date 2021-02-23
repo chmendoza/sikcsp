@@ -70,6 +70,9 @@ for i_patient, patient in enumerate(patients):
                     band, method, *k, *P)
                 foldpath = os.path.join(data_dir, patient, foldname)
                 os.makedirs(foldpath, exist_ok=True)
+                confsubdir = os.path.join(confdir, patient,\
+                    'band%d_%s_k%d-%d_P%d-%d' % (band, method, *k, *P))
+                os.makedirs(confsubdir, exist_ok=True)
                 for i_fold in range(n_folds):
                     params['crossval']['i_fold'] = i_fold
                     ffname = 'fold%d.npz' % i_fold
@@ -98,7 +101,7 @@ for i_patient, patient in enumerate(patients):
                     # A different random seed is passed to the shift-invariant k-means algorithm on each fold
                     seed = np.random.SeedSequence()
                     params['algo']['rng_seed'] = seed.entropy
-                    confname = 'crossval_kcsp_fold%d_band%d_%s_k%d-%d_P%d-%d.yaml' % (i_fold, band, method, *k, *P)
-                    confpath = os.path.join(confdir, patient, confname)
+                    confname = 'fold%d.yaml' % i_fold
+                    confpath = os.path.join(confsubdir, confname)
                     with open(confpath, 'w') as yamlfile:
                         yaml.dump(params, yamlfile, sort_keys=False)
