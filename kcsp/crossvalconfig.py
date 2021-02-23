@@ -21,11 +21,11 @@ parser.add_argument("-P", "--centroid-lengths", type=int,
                     help="Length of cluster centroids")
 args = parser.parse_args()
 
-params = dict.fromkeys(['crossval', 'data', 'algo'])
+params = dict.fromkeys(['patient_dir', 'crossval', 'data', 'algo'])
 params['crossval'] = dict.fromkeys(
-    ['n_folds', 'i_fold', 'path2indices', 'rng_seed'])
+    ['n_folds', 'i_fold', 'indices_filename', 'rng_seed'])
 params['data'] = dict.fromkeys(
-    ['patient_dir', 'Wpath', 'dfname', 'rfname', 'segment_len', 'window_len'])
+    ['W_filename', 'indices_filename', 'results_filename', 'segment_len', 'window_len'])
 params['algo'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length', 'rng_seed'])
 
 n_folds = 10
@@ -85,17 +85,15 @@ for i_patient, patient in enumerate(patients):
                             train2=kfold2[i_fold][0],\
                             test2=kfold2[i_fold][1])
                                         
-                    params['crossval']['path2indices'] = ffpath
+                    params['crossval']['indices_filename'] = ffname
                     Wfname = 'W_winlen-1min_band%d_%s.mat' % (band, method)
                     dfname = 'winlen-1min_start_gap-1sec.mat'
                     rfname = 'misclass_fold%d_band%d_%s_k%d-%d_P%d-%d.npy' % (
                         i_fold, band, method, *k, *P)
-                    params['data']['rfname'] = rfname
-                    params['data']['dfname'] = dfname
-                    params['data']['Wpath'] = os.path.join(
-                        data_dir, patient, Wfname)
-                    params['data']['patient_dir'] = os.path.join(
-                        data_dir, patient)
+                    params['data']['results_filename'] = rfname
+                    params['data']['indices_filename'] = dfname
+                    params['data']['W_filename'] = Wfname
+                    params['patient_dir'] = os.path.join(data_dir, patient)
                     params['algo']['n_clusters'] = k
                     params['algo']['centroid_length'] = P
                     # A different random seed is passed to the shift-invariant k-means algorithm on each fold
