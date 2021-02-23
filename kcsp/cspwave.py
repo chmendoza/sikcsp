@@ -43,7 +43,8 @@ wpath = params['data']['Wpath']
 dfname = params['data']['dfname']
 rfname = params['data']['rfname']
 patient_dir = params['data']['patient_dir']
-winlen = params['data']['winlen']
+winlen = params['data']['window_len']
+seglen = params['data']['segment_len']
 metric = params['algo']['metric']
 init = params['algo']['init']
 n_runs = params['algo']['n_runs']
@@ -60,23 +61,21 @@ conditions = ['preictal', 'interictal']
 X = [0]*2
 tic = time.perf_counter()
 for i_condition, condition in enumerate(conditions):
-    # file names and start indices of preictal windows
+    # file names and start indices of preictal segments
     dirpath = os.path.join(patient_dir, condition)
     fpath = os.path.join(dirpath, dfname)
-    i_start = utils.loadmat73(fpath, 'i_start')
+    i_start = utils.loadmat73(fpath, 'train_indices')
     i_start = utils.apply2list(i_start, np.squeeze)
-    i_start = utils.apply2list(i_start, minusone)
-    i_start = [i_start[ii][i_set] for ii in range(len(i_start))]
-    dfnames = utils.loadmat73(fpath, 'fnames')    
+    i_start = utils.apply2list(i_start, minusone)    
+    dfnames = utils.loadmat73(fpath, 'train_names')
 
     # Extract data and apply CSP filter
     X[i_condition] = utils.getCSPdata(
-        dirpath, dfnames, i_start, winlen, W[:, i_condition])
+        dirpath, dfnames, i_start, seglen, W[:, i_condition])
 
 toc = time.perf_counter()
 print("Data gathered and filtered after %0.4f seconds" % (toc - tic))
 
-#%% Run shift-invariant k-means in a k-fold cross-validation
 N1, N2 = X[0].shape[0], X[1].shape[0]
 misclass = 0
 
@@ -85,6 +84,10 @@ ffpath = os.path.join(patient_dir, ffname)
 with np.load(ffpath) as indices:
     train1, test1 = indices['train1'], indices['test1']
     train2, test2 = indices['train2'], indices['test2']
+
+# Split (croosval) training segments into smaller windows and shuffle at random
+X1train = X[0][train1]
+
 
 #%% Random generator
 seed = np.random.SeedSequence(init_seed)

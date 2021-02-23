@@ -15,7 +15,7 @@ params = dict.fromkeys(['crossval', 'data', 'algo'])
 params['crossval'] = dict.fromkeys(
     ['n_folds', 'i_fold', 'foldfile', 'rng_seed'])
 params['data'] = dict.fromkeys(
-    ['patient_dir', 'Wpath', 'dfname', 'rfname', 'winlen'])
+    ['patient_dir', 'Wpath', 'dfname', 'rfname', 'segment_len', 'window_len'])
 params['algo'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length', 'rng_seed'])
 
 n_folds = 10
@@ -28,10 +28,11 @@ methods = ['regular', 'betadiv', 'max-sliced-Bures']
 method = methods[0]
 
 srate = 512 # Hz
-params['data']['winlen'] = srate * 1 # 1 second
+params['data']['segment_len'] = srate * 60 # 1 minute
+params['data']['window_len'] = srate * 1  # 1 second
 bands = [[3,6],[2,7]] # best bands with highest AUC (NER'21)
-# Number of training samples per patient
-n_samples = [[6000, 116400], [4320, 130000]] #(preictal, interictal)
+# Number of training samples per patient. A sample is a segment.
+n_samples = [[98, 1886], [64, 1980]] #(preictal, interictal)
 
 params['algo']['metric'] = 'cosine'
 params['algo']['init'] = 'random-energy'
@@ -54,7 +55,7 @@ for i_patient, patient in enumerate(patients):
                 kfold1 = utils.kfold_split(N1, n_folds, shuffle=True, rng=rng)
                 kfold2 = utils.kfold_split(N2, n_folds, shuffle=True, rng=rng)
                 kfold1 = list(kfold1)
-                kfold2 = list(kfold2)
+                kfold2 = list(kfold2)                
                 for i_fold in range(n_folds):
                     params['crossval']['i_fold'] = i_fold
                     ffname = 'fold%d_band%d_%s_k%d-%d_P%d-%d.npz' % (
