@@ -86,7 +86,7 @@ for i_patient, patient in enumerate(patients):
                             test2=kfold2[i_fold][1])
                                         
                     params['crossval']['path2indices'] = ffpath
-                    Wfname = 'results_sikcsp_band%d_%s.mat' % (band, method)
+                    Wfname = 'W_winlen-1min_band%d_%s.mat' % (band, method)
                     dfname = 'winlen-1min_start_gap-1sec.mat'
                     rfname = 'misclass_fold%d_band%d_%s_k%d-%d_P%d-%d.npy' % (
                         i_fold, band, method, *k, *P)
