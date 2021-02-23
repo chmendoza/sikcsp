@@ -38,7 +38,7 @@ print(yaml.dump(params, sort_keys=False))
 print('=======================================')
 n_folds = params['crossval']['n_folds']
 i_fold = params['crossval']['i_fold']
-ffname = params['crossval']['foldfile']
+ffpath = params['crossval']['path2indices']
 wpath = params['data']['Wpath']
 dfname = params['data']['dfname']
 rfname = params['data']['rfname']
@@ -80,7 +80,6 @@ N1, N2 = X[0].shape[0], X[1].shape[0]
 misclass = 0
 
 ## Get indices of one cross-validation fold
-ffpath = os.path.join(patient_dir, ffname)
 with np.load(ffpath) as indices:
     train1, test1 = indices['train1'], indices['test1']
     train2, test2 = indices['train2'], indices['test2']

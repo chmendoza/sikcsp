@@ -23,7 +23,7 @@ args = parser.parse_args()
 
 params = dict.fromkeys(['crossval', 'data', 'algo'])
 params['crossval'] = dict.fromkeys(
-    ['n_folds', 'i_fold', 'foldfile', 'rng_seed'])
+    ['n_folds', 'i_fold', 'path2indices', 'rng_seed'])
 params['data'] = dict.fromkeys(
     ['patient_dir', 'Wpath', 'dfname', 'rfname', 'segment_len', 'window_len'])
 params['algo'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length', 'rng_seed'])
@@ -56,7 +56,7 @@ centroid_lengths = list(itertools.product(centroid_lengths, repeat=n_classes))
 for i_patient, patient in enumerate(patients):
     for band in bands[i_patient]:        
         for k in n_clusters:
-            for P in centroid_lengths:                
+            for P in centroid_lengths:
                 # Use same initial seed for folds of same hyperparameter point since random genetator in gen_kfold.py must be the same to generate the k-fold partition.                                
                 seed = np.random.SeedSequence()
                 params['crossval']['rng_seed'] = seed.entropy
@@ -65,12 +65,15 @@ for i_patient, patient in enumerate(patients):
                 kfold1 = utils.kfold_split(N1, n_folds, shuffle=True, rng=rng)
                 kfold2 = utils.kfold_split(N2, n_folds, shuffle=True, rng=rng)
                 kfold1 = list(kfold1)
-                kfold2 = list(kfold2)                
+                kfold2 = list(kfold2)
+                foldname = 'band%d_%s_k%d-%d_P%d-%d.npz' % (
+                    band, method, *k, *P)
+                foldpath = os.path.join(data_dir, patient, foldname)
+                os.makedirs(foldpath, exist_ok=True)
                 for i_fold in range(n_folds):
                     params['crossval']['i_fold'] = i_fold
-                    ffname = 'fold%d_band%d_%s_k%d-%d_P%d-%d.npz' % (
-                        i_fold, band, method, *k, *P)
-                    ffpath = os.path.join(data_dir, patient, ffname)
+                    ffname = 'fold%d.npz' % i_fold
+                    ffpath = os.path.join(foldpath, ffname)
                     # Save cross-validation indices
                     with open(ffpath, 'wb') as foldfile:
                         np.savez(foldfile,\
@@ -79,7 +82,7 @@ for i_patient, patient in enumerate(patients):
                             train2=kfold2[i_fold][0],\
                             test2=kfold2[i_fold][1])
                                         
-                    params['crossval']['foldfile'] = ffname
+                    params['crossval']['path2indices'] = ffpath
                     Wfname = 'results_sikcsp_band%d_%s.mat' % (band, method)
                     dfname = 'winlen-1min_start_gap-1sec.mat'
                     rfname = 'misclass_fold%d_band%d_%s_k%d-%d_P%d-%d.npy' % (
