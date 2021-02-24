@@ -83,18 +83,15 @@ for i_condition, condition in enumerate(conditions):
 toc = time.perf_counter()
 print("Data gathered and filtered after %0.4f seconds" % (toc - tic))
 
-N1, N2 = X[0].shape[0], X[1].shape[0]
-misclass = 0
-
 ## Get indices of one cross-validation fold
 ffpath = os.path.join(patient_dir, foldname, ffname)
 with np.load(ffpath) as indices:
     train1, test1 = indices['train1'], indices['test1']
     train2, test2 = indices['train2'], indices['test2']
 
-# Split (croosval) training segments into smaller windows and shuffle at random
-X1train = X[0][train1]
-
+# Split (croosval) training segments into smaller windows
+X1train = utils.splitdata(X[0][train1], winlen) # preictal
+X2train = utils.splitdata(X[1][train2], winlen)  # interictal
 
 #%% Random generator
 seed = np.random.SeedSequence(init_seed)
@@ -110,40 +107,56 @@ tic = time.perf_counter()
 print('Fold %d out of %d' % (i_fold+1, n_folds))
 # Training
 C1, nu1, tau1, d1, sumd1, n_iter1 = sikmeans.shift_invariant_k_means(
-    X[0][train1], k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
+    X1train, k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
 C2, nu2, tau2, d2, sumd2, n_iter2 = sikmeans.shift_invariant_k_means(
-    X[1][train2], k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
+    X2train, k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
 
 # Estimate posterior
-nu = bayes.cluster_assignment(
-    X[0][train1], X[1][train2], C1, C2, metric=metric)
-p_J = bayes.likelihood(nu, N=(N1, N2), k=(k1, k2))  # (2,k1,k2)
-p_S = np.zeros((2, 1, 1))
+nu_11, nu_12 = bayes.cluster_assignment(X1train, C1, C2, metric=metric)
+nu_21, nu_22 = bayes.cluster_assignment(X2train, C1, C2, metric=metric)
+nu = nu_11, nu_12, nu_21, nu_22
+N1, N2 = X[0].shape[0], X[1].shape[0] # Number of windows
+p_C = bayes.likelihood(nu, N=(N1, N2), k=(k1, k2))  # (2,k1,k2)
+p_S = np.zeros(2)
 p_S[0] = N1/(N1+N2)
 p_S[1] = N2/(N1+N2)
-posterior = p_S * p_J  # ~ P(S=s | J1 = j, J2 = l)
 
-# Compute misclassification rate using MAP
-N1, N2 = X[0][test1].shape[0], X[1][test2].shape[0]
-nu = bayes.cluster_assignment(
-    X[0][test1], X[1][test2], C1, C2, metric=metric)
-# Posterior when data (cluster assignments) come from class s=1
-# nu[0] are cluster assignments using C1
-# nu[1] are cluster assignments using C2
-pp1 = posterior[:, nu[0], nu[1]]  # (2, N1).
-pp2 = posterior[:, nu[2], nu[3]]
-# for each pair assignment pair (j,l), find the value of s (row index) with AP. Row 0 is class 1.
-I1 = np.argmax(pp1, axis=0)
-I2 = np.argmax(pp2, axis=0)
-misclass = np.sum(I1 != 0)
-misclass += np.sum(I2 != 1)
-misclass /= (N1 + N2)
+# Split (croosval) test segments into smaller windows
+X1test = utils.splitdata(X[0][test1], winlen, keep_dims=False)  # preictal
+X2test = utils.splitdata(X[1][test2], winlen, keep_dims=False)  # interictal
+del X  # Free memory used by X
 
+# Concatenate segments from both classes
+Xtest = np.concatenate((X1test, X2test), axis=0)
+del X1test, X2test
+
+# True label vector
+M_bar1, M_bar2 = X1test.shape[0], X2test.shape[0] # Number of segments
+s = np.r_[np.ones(M_bar1, dtype=int), 2 * np.ones(M_bar2, dtype=int)]
+M_bar = M_bar1 + M_bar2 # Total number of test segments
+
+# Initialize estimated label, s_hat
+s_hat = np.zeros(M_bar, dtype=int)
+
+# Find
+for i_segment in np.arange(M_bar):
+    nu_1, nu_2 = bayes.cluster_assignment(
+        Xtest[i_segment], C1, C2, metric=metric)        
+    M = Xtest[i_segment].shape[0] # Num. of windows on a segment
+    # Log-posterior:
+    logpost = M*np.log(p_S) + \
+            np.sum(np.log(p_C[:, nu_1, nu_2]), axis=1)
+    # add 1 to convert array element index to class label
+    s_hat[i_segment] = np.argmax(logpost) + 1
+
+# Compute misclassification rate
+ind = np.asarray(s != s_hat).nonzero()[0]
+misclass = ind.shape[0] / M_bar
 
 toc = time.perf_counter()
 print("Fold processed after %0.4f seconds" % (toc - tic))
 print('Misclassification: %.3f' % misclass)
 
-rpath = os.path.join(patient_dir, rfname)
+rpath = os.path.join(patient_dir, foldname, rfname)
 with open(rpath, 'wb') as f:
     np.save(f, misclass)
