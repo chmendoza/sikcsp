@@ -201,3 +201,34 @@ def kfold_split(n_samples, n_folds, shuffle=None, rng=None):
         test_index = indices[test_mask]
         yield train_index, test_index
         current = stop
+
+
+def splitdata(X, chunk_size, keep_dims=True):
+    """
+    Split a data into smaller non-overlapping chunks
+
+    Parameters
+    ----------
+    X (array):
+        A 2D array. The rows are observations (data points). X.shape = (m,n)
+    chunk_size (int):
+        Each observation is split into chunks of size chunk_size. It is assumed that n = k*chunk_size, with k an integer.
+    keep_dims (bool):
+        It controls the number of dimensions of the returned matrix. See below.
+
+    Returns
+    -------
+    X (array):
+        If keep_dims == True, X.shape = (k*m, chunk_size): the chunks of each observation are stacked vertically as rows of the output matrix. If keep_dims == False, X.shape = (m, k, chunk_size): the chunks are stacked along the second dimension and extend along the third dimension of the output matrix.
+    """
+
+    ind1 = np.arange(X.shape[0]).reshape(-1, 1, 1)
+    offset = np.arange(0, X.shape[1], chunk_size).reshape(1, -1, 1)
+    chunk_ind = np.arange(chunk_size).reshape(1, 1, -1)
+    ind2 = offset + chunk_ind
+    X = X[ind1, ind2]
+
+    if keep_dims:
+        return X.reshape(-1, chunk_size)
+    else:
+        return X
