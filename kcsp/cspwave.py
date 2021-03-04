@@ -3,8 +3,10 @@ import os
 import sys
 import numpy as np
 import time
+from numpy.core.fromnumeric import trace
 import yaml
 from argparse import ArgumentParser
+import tracemalloc
 
 # Add path to package directory to access main module using absolute import
 sys.path.insert(0,
@@ -58,6 +60,7 @@ k1, k2 = params['Algorithm']['n_clusters']
 P1, P2 = params['Algorithm']['centroid_length']
 init_seed = params['Algorithm']['rng_seed']
 
+tracemalloc.start() # start memory tracing
 #%% Get the CSP filters
 wpath = os.path.join(patient_dir, wfname)
 W = utils.loadmat73(wpath, 'W')
@@ -128,17 +131,17 @@ del X  # Free memory used by X
 
 # Concatenate segments from both classes
 Xtest = np.concatenate((X1test, X2test), axis=0)
+M_bar1, M_bar2 = X1test.shape[0], X2test.shape[0]  # Number of segments
 del X1test, X2test
 
 # True label vector
-M_bar1, M_bar2 = X1test.shape[0], X2test.shape[0] # Number of segments
 s = np.r_[np.ones(M_bar1, dtype=int), 2 * np.ones(M_bar2, dtype=int)]
 M_bar = M_bar1 + M_bar2 # Total number of test segments
 
 # Initialize estimated label, s_hat
 s_hat = np.zeros(M_bar, dtype=int)
 
-# Find
+# Predict class label using MAP
 for i_segment in np.arange(M_bar):
     nu_1, nu_2 = bayes.cluster_assignment(
         Xtest[i_segment], C1, C2, metric=metric)        
@@ -149,14 +152,19 @@ for i_segment in np.arange(M_bar):
     # add 1 to convert array element index to class label
     s_hat[i_segment] = np.argmax(logpost) + 1
 
-# Compute misclassification rate
-ind = np.asarray(s != s_hat).nonzero()[0]
-misclass = ind.shape[0] / M_bar
+# Compute Matthews correlation coefficient (MCC)
+confmat = utils.confusion_matrix(s, s_hat)
+tp, fn, fp, tn = confmat.flatten()
+MCC = (tp * tn - fp * fn)/\
+    np.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
 
 toc = time.perf_counter()
 print("Fold processed after %0.4f seconds" % (toc - tic))
-print('Misclassification: %.3f' % misclass)
+print('MCC: %.3f' % MCC)
 
 rpath = os.path.join(patient_dir, foldname, rfname)
 with open(rpath, 'wb') as f:
-    np.save(f, misclass)
+    np.save(f, MCC)
+
+snapshot = tracemalloc.take_snapshot()
+utils.display_top(snapshot)
