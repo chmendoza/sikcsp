@@ -3,6 +3,7 @@ import h5py
 import numpy as np
 import multiprocessing
 import numbers
+import tracemalloc, linecache
 
 def loadmat73(fpath, varname):
     """ Load data from a -v7.3 Matlab file."""
@@ -232,3 +233,59 @@ def splitdata(X, chunk_size, keep_dims=True):
         return X.reshape(-1, chunk_size)
     else:
         return X
+
+def confusion_matrix(s, s_hat):
+    """
+    Compute entries of a 2x2 confusion matrix
+
+    Parameters
+    ----------
+    s (array):
+        True class labels. s.shape = (N,). Positive class is s=1. Negative class is s=2.
+    s_hat (array):
+        Predicted class labels. s_hat.shape = (N,)
+
+    Return
+    ------
+    X (array):
+        Confusion matrix. 
+            X[0,0]: True positives
+            X[0,1]: False negatives
+            X[1,0]: False positives
+            X[1,1]: True negatives
+    """
+
+    n_samples = s.shape[0]
+    classes = np.r_[1, 2]
+    N_CLASSES = classes.size
+
+    X = np.empty((N_CLASSES, N_CLASSES))
+
+    for ii, tl in enumerate(classes): # true label
+        for jj, pl in enumerate(classes): # predicted label
+            v = (s == tl) & (s_hat == pl)
+            X[ii, jj] = v.nonzero()[0].size
+
+    return X
+
+
+def display_top(snapshot, key_type='lineno', limit=10):
+    snapshot = snapshot.filter_traces((tracemalloc.Filter(
+        False, "<frozen importlib._bootstrap>"), tracemalloc.Filter(False, "<unknown>"),))
+    top_stats = snapshot.statistics(key_type)
+    
+    print("Top %s lines" % limit)
+    for index, stat in enumerate(top_stats[:limit], 1):
+        frame = stat.traceback[0]
+        print("#%s: %s:%s: %.1f KiB" %
+              (index, frame.filename, frame.lineno, stat.size / 1024))
+        line = linecache.getline(frame.filename, frame.lineno).strip()
+        if line:
+            print('    %s' % line)
+
+    other = top_stats[limit:]
+    if other:
+        size = sum(stat.size for stat in other)
+        print("%s other: %.1f KiB" % (len(other), size / 1024))
+    total = sum(stat.size for stat in top_stats)
+    print("Total allocated size: %.1f KiB" % (total / 1024))
