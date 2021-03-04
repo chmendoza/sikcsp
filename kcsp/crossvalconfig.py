@@ -32,27 +32,47 @@ params['Algorithm'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', '
 n_folds = 10
 params['Crossvalidation']['n_folds'] = n_folds
 
-patients = ['HUP070', 'HUP078']
-data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
-confdir = '/home/1420/sw/shift_kmeans/kcsp/config'
+# patients = ['HUP070', 'HUP078']
+# data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
+# confdir = '/home/1420/sw/shift_kmeans/kcsp/config'
+patients = ['Study012']
+data_dir = '/home/cmendoza/Research/sikmeans/LKini2019/data/toy'
+confdir = '/home/cmendoza/Research/sikmeans/LKini2019/config'
 methods = ['regular', 'betadiv', 'max-sliced-Bures']
 method = methods[0]
 
 srate = 512 # Hz
 params['Data']['Segment length'] = srate * 60 # 1 minute
 params['Data']['Window length'] = srate * 1  # 1 second
-bands = [[3,6],[2,7]] # best bands with highest AUC (NER'21)
+bands = [[3, 6], [2, 7]]  # best bands with highest AUC (NER'21)
 # Number of training samples per patient. A sample is a segment.
-n_samples = [[98, 1886], [64, 1980]] #(preictal, interictal)
+# Study012-toy. Training:
+n_samples = [[61,111]] #(preictal, interictal)
+# Study012-toy. Testing: (16,28)
+bands = [[3]] # best bands with highest AUC (NER'21)
+# # Number of training samples per patient. A sample is a segment.
+# n_samples = [[98, 1886], [64, 1980]] #(preictal, interictal)
 
 params['Algorithm']['metric'] = 'cosine'
 params['Algorithm']['init'] = 'random-energy'
 params['Algorithm']['n_runs'] = 3
+n_classes = 2
+
+# Read number of cluster and centroid lengths from command line
+# Transform them into tuples of repeated value: use same values for preictal and interictal segments
 n_clusters = args.n_clusters
 centroid_lengths = args.centroid_lengths
-n_classes = 2
-n_clusters = list(itertools.product(n_clusters, repeat=n_classes))
-centroid_lengths = list(itertools.product(centroid_lengths, repeat=n_classes))
+n_clusters = np.array(n_clusters)
+n_clusters = np.repeat(n_clusters, 2).reshape(-1, n_classes)
+n_clusters = n_clusters.tolist()
+centroid_lengths = np.array(centroid_lengths)
+centroid_lengths = np.repeat(
+    centroid_lengths, n_classes).reshape(-1, n_classes)
+centroid_lengths = centroid_lengths.tolist()
+
+# Consider all possible 'combinations':
+# n_clusters = list(itertools.product(n_clusters, repeat=n_classes))
+# centroid_lengths = list(itertools.product(centroid_lengths, repeat=n_classes))
 
 for i_patient, patient in enumerate(patients):
     for band in bands[i_patient]:        
