@@ -92,7 +92,7 @@ with np.load(ffpath) as indices:
     train1, test1 = indices['train1'], indices['test1']
     train2, test2 = indices['train2'], indices['test2']
 
-# Split (croosval) training segments into smaller windows
+# Split (cross-validation) training segments into smaller windows
 X1train = utils.splitdata(X[0][train1], winlen) # preictal
 X2train = utils.splitdata(X[1][train2], winlen)  # interictal
 
@@ -114,11 +114,11 @@ C1, nu1, tau1, d1, sumd1, n_iter1 = sikmeans.shift_invariant_k_means(
 C2, nu2, tau2, d2, sumd2, n_iter2 = sikmeans.shift_invariant_k_means(
     X2train, k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
 
-# Estimate posterior
-nu_11, nu_12 = bayes.cluster_assignment(X1train, C1, C2, metric=metric)
-nu_21, nu_22 = bayes.cluster_assignment(X2train, C1, C2, metric=metric)
-nu = nu_11, nu_12, nu_21, nu_22
-N1, N2 = X[0].shape[0], X[1].shape[0] # Number of windows
+# Syntax for cluster assignments: nu_rs. r is the index of the codebook (C1 or C2). s is the index of the window (or segment) class, preictal (s=1) or interictal (s=2).
+nu_11, nu_21 = bayes.cluster_assignment(X1train, C1, C2, metric=metric)
+nu_12, nu_22 = bayes.cluster_assignment(X2train, C1, C2, metric=metric)
+nu = nu_11, nu_21, nu_12, nu_22
+N1, N2 = X1train.shape[0], X2train.shape[0] # Number of windows
 p_C = bayes.likelihood(nu, N=(N1, N2), k=(k1, k2))  # (2,k1,k2)
 p_S = np.zeros(2)
 p_S[0] = N1/(N1+N2)
@@ -147,16 +147,23 @@ for i_segment in np.arange(M_bar):
         Xtest[i_segment], C1, C2, metric=metric)        
     M = Xtest[i_segment].shape[0] # Num. of windows on a segment
     # Log-posterior:
-    logpost = M*np.log(p_S) + \
-            np.sum(np.log(p_C[:, nu_1, nu_2]), axis=1)
+    evalp_C = p_C[:, nu_1, nu_2] # Eval likelihood at cluster assingment pairs
+    # Avoid divide-by-zero warning:
+    logp_C = np.full((2, nu_1.size), np.NINF)
+    np.log(evalp_C, out=logp_C, where=evalp_C>0)
+    logpost = M*np.log(p_S) + np.sum(logp_C, axis=1)
     # add 1 to convert array element index to class label
     s_hat[i_segment] = np.argmax(logpost) + 1
 
 # Compute Matthews correlation coefficient (MCC)
+# Assume that the positive class (preictal) is the minority class and that the negative class (interictal) is the majority class. Also, there are always examples from both classes.
 confmat = utils.confusion_matrix(s, s_hat)
 tp, fn, fp, tn = confmat.flatten()
-MCC = (tp * tn - fp * fn)/\
-    np.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+if tp == 0 and fp == 0: # All the examples are classified as negative
+    MCC = 0
+else:
+    MCC = (tp * tn - fp * fn)/\
+        np.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
 
 toc = time.perf_counter()
 print("Fold processed after %0.4f seconds" % (toc - tic))
