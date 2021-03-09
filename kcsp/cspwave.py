@@ -6,7 +6,6 @@ import time
 from numpy.core.fromnumeric import trace
 import yaml
 from argparse import ArgumentParser
-import tracemalloc
 
 # Add path to package directory to access main module using absolute import
 sys.path.insert(0,
@@ -60,7 +59,6 @@ k1, k2 = params['Algorithm']['n_clusters']
 P1, P2 = params['Algorithm']['centroid_length']
 init_seed = params['Algorithm']['rng_seed']
 
-tracemalloc.start() # start memory tracing
 #%% Get the CSP filters
 wpath = os.path.join(patient_dir, wfname)
 W = utils.loadmat73(wpath, 'W')
@@ -172,6 +170,3 @@ print('MCC: %.3f' % MCC)
 rpath = os.path.join(patient_dir, foldname, rfname)
 with open(rpath, 'wb') as f:
     np.save(f, MCC)
-
-snapshot = tracemalloc.take_snapshot()
-utils.display_top(snapshot)
