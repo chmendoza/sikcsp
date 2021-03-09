@@ -32,12 +32,12 @@ params['Algorithm'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', '
 n_folds = 10
 params['Crossvalidation']['n_folds'] = n_folds
 
-# patients = ['HUP070', 'HUP078']
-# data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
-# confdir = '/home/1420/sw/shift_kmeans/kcsp/config'
-patients = ['Study012']
-data_dir = '/home/cmendoza/Research/sikmeans/LKini2019/data/toy'
-confdir = '/home/cmendoza/Research/sikmeans/LKini2019/config'
+patients = ['HUP070', 'HUP078']
+data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
+confdir = '/home/1420/sw/shift_kmeans/kcsp/config'
+# patients = ['Study012']
+# data_dir = '/home/cmendoza/Research/sikmeans/LKini2019/data/toy'
+# confdir = '/home/cmendoza/Research/sikmeans/LKini2019/config'
 methods = ['regular', 'betadiv', 'max-sliced-Bures']
 method = methods[0]
 
@@ -46,12 +46,12 @@ params['Data']['Segment length'] = srate * 60 # 1 minute
 params['Data']['Window length'] = srate * 1  # 1 second
 bands = [[3, 6], [2, 7]]  # best bands with highest AUC (NER'21)
 # Number of training samples per patient. A sample is a segment.
-# Study012-toy. Training:
-n_samples = [[61,111]] #(preictal, interictal)
-# Study012-toy. Testing: (16,28)
-bands = [[3]] # best bands with highest AUC (NER'21)
-# # Number of training samples per patient. A sample is a segment.
-# n_samples = [[98, 1886], [64, 1980]] #(preictal, interictal)
+# # Study012-toy. Training:
+# n_samples = [[61,111]] #(preictal, interictal)
+# # Study012-toy. Testing: (16,28)
+# bands = [[3]] # best bands with highest AUC (NER'21)
+# Number of training samples per patient. A sample is a segment.
+n_samples = [[98, 1886], [64, 1980]] #(preictal, interictal)
 
 params['Algorithm']['metric'] = 'cosine'
 params['Algorithm']['init'] = 'random-energy'
