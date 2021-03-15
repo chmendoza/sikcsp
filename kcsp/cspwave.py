@@ -157,6 +157,8 @@ for i_segment in np.arange(M_bar):
 # Assume that the positive class (preictal) is the minority class and that the negative class (interictal) is the majority class. Also, there are always examples from both classes.
 confmat = utils.confusion_matrix(s, s_hat)
 tp, fn, fp, tn = confmat.flatten()
+print('TP: %5d\t FN: %5d' % (tp, fn))
+print('FP: %5d\t TN: %5d' % (fp, tn))
 if tp == 0 and fp == 0: # All the examples are classified as negative
     MCC = 0
 else:
