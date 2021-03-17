@@ -40,11 +40,11 @@ n_folds = 10
 params['Crossvalidation']['n_folds'] = n_folds
 
 patients = args.patients
-# data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
-# confdir = '/home/1420/sw/shift_kmeans/kcsp/config'
+data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
+confdir = '/home/1420/sw/shift_kmeans/kcsp/config'
 # patients = ['Study012']
-data_dir = '/home/cmendoza/Research/sikmeans/LKini2019/data/toy'
-confdir = '/home/cmendoza/Research/sikmeans/LKini2019/config'
+# data_dir = '/home/cmendoza/Research/sikmeans/LKini2019/data/toy'
+# confdir = '/home/cmendoza/Research/sikmeans/LKini2019/config'
 methods = ['regular', 'betadiv', 'max-sliced-Bures']
 method = methods[0]
 
