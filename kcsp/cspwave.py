@@ -64,7 +64,6 @@ wpath = os.path.join(patient_dir, wfname)
 W = utils.loadmat73(wpath, 'W')
 
 #%% Extract data and apply CSP filter
-i_set = 0  # 0: training, 1: testing
 conditions = ['preictal', 'interictal']
 X = [0]*2
 tic = time.perf_counter()
