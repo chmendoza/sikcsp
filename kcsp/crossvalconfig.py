@@ -14,6 +14,8 @@ from kcsp import utils
 
 def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 
+os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
+
 # Parse command-line arguments
 parser = ArgumentParser()
 parser.add_argument("-k", "--nclusters", dest="n_clusters",
