@@ -92,6 +92,7 @@ overlap_str = 'non-overlap'
 winlen = srate * 60  # 1 minute windows extracted from epochs
 start_gap = srate * 1 # gap for random sampling
 dfname = 'split_%s_winlen-%d_gap-%d.mat' % (overlap_str, winlen, start_gap)
+params['Filenames']['Data indices'] = dfname
 
 for i_patient, patient in enumerate(patients):
     patient = patient[0] # list -> str
@@ -142,12 +143,11 @@ for i_patient, patient in enumerate(patients):
                             test2=kfold2[i_fold][1])
                                         
                     params['Filenames']['Fold indices'] = ffname
-                    Wfname = 'results_band%d_%s_%s_winlen-%d_gap-%d' % (band, method, overlap_str, winlen, start_gap)                    
-                    dfname = 'winlen-1min_start_gap-1sec.mat'
+                    Wfname = 'results_band%d_%s_%s_winlen-%d_gap-%d' % (
+                        band, method, overlap_str, winlen, start_gap)
                     rfname = 'misclass_fold%d_band%d_%s_k%d-%d_P%d-%d.npy' % (
                         i_fold, band, method, *k, *P)
-                    params['Filenames']['Results'] = rfname
-                    params['Filenames']['Data indices'] = dfname
+                    params['Filenames']['Results'] = rfname                    
                     params['Filenames']['CSP filters'] = Wfname
                     params['Algorithm']['n_clusters'] = k
                     params['Algorithm']['centroid_length'] = P
