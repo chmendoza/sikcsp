@@ -140,6 +140,9 @@ s_hat = np.zeros(M_bar, dtype=int)
 
 # Predict class label using MAP
 likelihood_weights = np.reciprocal(p_S)
+print('P(S=1) = %.3f\tP(S=2) = %.3f' % (p_S[0], p_S[1]))
+print('1/P(S=1) = %.3f\t1/P(S=2) = %.3f'\
+    % (likelihood_weights[0],likelihood_weights[1]))
 for i_segment in np.arange(M_bar):
     nu_1, nu_2 = bayes.cluster_assignment(
         Xtest[i_segment], C1, C2, metric=metric)        
