@@ -38,7 +38,7 @@ for i_k, k in enumerate(n_clusters):
         MCC = np.zeros((len(n_clusters), len(centroid_lengths)))
         foldname = 'band%d_%s_k%d-%d_P%d-%d' % (
             band, method, k, k, P, P)
-        for i_fold in n_folds:
+        for i_fold in range(n_folds):
             rfname = 'crossval_fold%d_band%d_%s_k%d-%d_P%d-%d.npz' % (
                 i_fold, band, method, k, k, P, P)
             fpath = os.path.join(data_dir, foldname, rfname)
