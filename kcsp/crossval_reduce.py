@@ -20,7 +20,7 @@ def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 parser = ArgumentParser()
 parser.add_argument("-d", "--dir", dest="data_dir",
                     help="Path to folder with cross-validation result files")
-parser.add_argument("-b", "--band", dest="band",
+parser.add_argument("-b", "--band", dest="band", type=int,
                     help="Spectral band chosen")
 
 args = parser.parse_args()
