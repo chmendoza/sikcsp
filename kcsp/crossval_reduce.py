@@ -50,3 +50,6 @@ for i_k, k in enumerate(n_clusters):
 
 with np.printoptions(precision=3, floatmode='fixed'):            
     print(MCC)
+
+np.savetxt(os.path.join(data_dir, 'averageMCC.csv'), MCC, delimiter=",")
+
