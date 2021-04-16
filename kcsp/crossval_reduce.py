@@ -44,7 +44,9 @@ for i_k, k in enumerate(n_clusters):
             fpath = os.path.join(data_dir, foldname, rfname)
             with np.load(fpath) as data:
                 MCC[i_k, i_P] += data['MCC'][1] # Maximum likelihood-based score
-        MCC[i_k, i_P] /= 10
-        print('Average MCC for k = %d and P = %d' % (k, P))
-        with np.printoptions(precision=3, floatmode='fixed'):            
-            print(MCC)
+        MCC[i_k, i_P] /= n_folds
+        print('Average MCC for k = %d and P = %d: %.3f' \
+            % (k, P, MCC[i_k, i_P]))
+
+with np.printoptions(precision=3, floatmode='fixed'):            
+    print(MCC)
