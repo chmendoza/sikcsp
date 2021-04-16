@@ -18,7 +18,7 @@ def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 
 # Parse command-line arguments
 parser = ArgumentParser()
-parser.add_argument("-d", "--dir", dest="dat_dir",
+parser.add_argument("-d", "--dir", dest="data_dir",
                     help="Path to folder with cross-validation result files")
 parser.add_argument("-b", "--band", dest="band",
                     help="Spectral band chosen")
