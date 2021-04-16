@@ -130,7 +130,7 @@ for i_patient, patient in enumerate(patients):
                     'band%d_%s_k%d-%d_P%d-%d' % (band, method, *k, *P))
                 os.makedirs(confsubdir, exist_ok=True)
                 params['Fold indices dir'] = foldname
-                for i_fold in range(n_folds):
+                for i_fold in range(n_folds):                    
                     params['Crossvalidation']['i_fold'] = i_fold
                     ffname = 'fold%d.npz' % i_fold
                     ffpath = os.path.join(foldpath, ffname)
@@ -145,7 +145,7 @@ for i_patient, patient in enumerate(patients):
                     params['Filenames']['Fold indices'] = ffname
                     Wfname = 'results_band%d_%s_%s_winlen-%d_gap-%d.mat' % (
                         band, method, overlap_str, winlen, start_gap)
-                    rfname = 'misclass_fold%d_band%d_%s_k%d-%d_P%d-%d.npy' % (
+                    rfname = 'crossval_fold%d_band%d_%s_k%d-%d_P%d-%d.npz' % (
                         i_fold, band, method, *k, *P)
                     params['Filenames']['Results'] = rfname                    
                     params['Filenames']['CSP filters'] = Wfname
