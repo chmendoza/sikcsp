@@ -136,9 +136,10 @@ s = np.r_[np.ones(M_bar1, dtype=int), 2 * np.ones(M_bar2, dtype=int)]
 M_bar = M_bar1 + M_bar2 # Total number of test segments
 
 # Initialize estimated label, s_hat
-s_hat = np.zeros(M_bar, dtype=int)
+s_hat = np.zeros((2,M_bar), dtype=int)
 
-# Predict class label using MAP
+# Predict class label using MAP and ML
+likelihood_weights = np.ones_like(p_S) * 0.5
 for i_segment in np.arange(M_bar):
     nu_1, nu_2 = bayes.cluster_assignment(
         Xtest[i_segment], C1, C2, metric=metric)        
@@ -148,26 +149,51 @@ for i_segment in np.arange(M_bar):
     # Avoid divide-by-zero warning:
     logp_C = np.full((2, nu_1.size), np.NINF)
     np.log(evalp_C, out=logp_C, where=evalp_C>0)
-    logpost = M*np.log(p_S) + np.sum(logp_C, axis=1)
+    logMAP = M*np.log(p_S) + np.sum(logp_C, axis=1)
+    logML = M*np.log(likelihood_weights) + np.sum(logp_C, axis=1)    
     # add 1 to convert array element index to class label
-    s_hat[i_segment] = np.argmax(logpost) + 1
+    s_hat[0, i_segment] = np.argmax(logMAP) + 1
+    s_hat[1, i_segment] = np.argmax(logML) + 1
 
 # Compute Matthews correlation coefficient (MCC)
 # Assume that the positive class (preictal) is the minority class and that the negative class (interictal) is the majority class. Also, there are always examples from both classes.
-confmat = utils.confusion_matrix(s, s_hat)
-tp, fn, fp, tn = confmat.flatten()
-print('TP: %5d\t FN: %5d' % (tp, fn))
-print('FP: %5d\t TN: %5d' % (fp, tn))
-if tp == 0 and fp == 0: # All the examples are classified as negative
-    MCC = 0
-else:
-    MCC = (tp * tn - fp * fn)/\
-        np.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+MCC = np.zeros(2)
+F1 = np.zeros(2)
+precision = np.zeros(2)
+recall = np.zeros(2)
+accu = np.zeros(2)
+confmat = [0]*2
+for ii in np.arange(2):
+    confmat[ii] = utils.confusion_matrix(s, s_hat[ii,:])
+    tp, fn, fp, tn = confmat[ii].flatten()
+    print('TP: %5d\t FN: %5d' % (tp, fn))
+    print('FP: %5d\t TN: %5d' % (fp, tn))
+    if (tp == 0 and fp == 0) or (tn == 0 and fn == 0):
+        MCC[ii] += 0
+        if tp == 0 and fp == 0:
+            precision[ii] = 0
+        else:
+            precision[ii] = tp / (tp + fp)
+    else:
+        precision[ii] = tp / (tp + fp)
+        MCC[ii] += (tp * tn - fp * fn) /\
+            np.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+    
+    # Compute F1-score
+    recall[ii] = tp / (tp + fn)    
+    if recall[ii] == 0:
+        F1[ii] = 0
+    else:
+        F1[ii] += 2 * precision[ii] * recall[ii] / \
+            (precision[ii] + recall[ii])  # harmonic mean
+    accu[ii] = (tp+tn) / M_bar
 
 toc = time.perf_counter()
 print("Fold processed after %0.4f seconds" % (toc - tic))
-print('MCC: %.3f' % MCC)
+print('MCC with MAP: %.3f' % MCC[0])
+print('MCC with ML: %.3f' % MCC[1])
 
 rpath = os.path.join(patient_dir, foldname, rfname)
 with open(rpath, 'wb') as f:
-    np.save(f, MCC)
+    np.savez(f, C1=C1, C2=C2, MCC=MCC, F1=F1, accu=accu,\
+        precision=precision, recall=recall, confmat=confmat)
