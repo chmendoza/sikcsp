@@ -33,9 +33,9 @@ centroid_lengths = [30, 40, 60, 120, 200, 350]
 method = 'regular'
 n_folds = 10
 
+MCC = np.zeros((len(n_clusters), len(centroid_lengths)))
 for i_k, k in enumerate(n_clusters):
-    for i_P, P in enumerate(centroid_lengths):
-        MCC = np.zeros((len(n_clusters), len(centroid_lengths)))
+    for i_P, P in enumerate(centroid_lengths):        
         foldname = 'band%d_%s_k%d-%d_P%d-%d' % (
             band, method, k, k, P, P)
         for i_fold in range(n_folds):
