@@ -37,7 +37,7 @@ for i_k, k in enumerate(n_clusters):
     for i_P, P in enumerate(centroid_lengths):
         MCC = np.zeros((len(n_clusters), len(centroid_lengths)))
         foldname = 'band%d_%s_k%d-%d_P%d-%d' % (
-            band, method, *k, *P)
+            band, method, k, k, P, P)
         for i_fold in n_folds:
             rfname = 'crossval_fold%d_band%d_%s_k%d-%d_P%d-%d.npz' % (
                 i_fold, band, method, k, k, P, P)
