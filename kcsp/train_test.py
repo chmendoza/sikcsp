@@ -99,7 +99,7 @@ if init_seed is None:
         yaml.dump(params, yamfile, sort_keys=False)
 
 tic = time.perf_counter()
-print('Fold %d out of %d' % (i_fold+1, n_folds))
+
 # Training
 C1, nu1, tau1, d1, sumd1, n_iter1 = sikmeans.shift_invariant_k_means(
     X1train, k, P, metric=metric, init=init, n_init=n_runs, rng=rng, verbose=True)
@@ -111,7 +111,7 @@ nu_11, nu_21 = bayes.cluster_assignment(X1train, C1, C2, metric=metric)
 nu_12, nu_22 = bayes.cluster_assignment(X2train, C1, C2, metric=metric)
 nu = nu_11, nu_21, nu_12, nu_22
 N1, N2 = X1train.shape[0], X2train.shape[0]  # Number of windows
-p_C = bayes.likelihood(nu, N=(N1, N2), k=(k1, k2))  # (2,k1,k2)
+p_C = bayes.likelihood(nu, N=(N1, N2), k=(k, k))  # (2,k1,k2)
 p_S = np.zeros(2)
 p_S[0] = N1/(N1+N2)
 p_S[1] = N2/(N1+N2)
