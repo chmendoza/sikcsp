@@ -1,6 +1,4 @@
 #%%
-import shift_kmeans.shift_kmeans as sikmeans
-from kcsp import utils, bayes
 import os
 import sys
 import numpy as np
@@ -14,6 +12,9 @@ sys.path.insert(0,
                 os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              '..')))
 
+
+import shift_kmeans.shift_kmeans as sikmeans
+from kcsp import utils, bayes
 
 def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 
