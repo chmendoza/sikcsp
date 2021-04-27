@@ -3,8 +3,6 @@ Use shift-invariant k-means on top k CSP waves
 """
 # %%
 import numpy as np
-import matplotlib.pyplot as plt
-from  matplotlib.backends.backend_pdf import PdfPages
 
 import os
 import sys
