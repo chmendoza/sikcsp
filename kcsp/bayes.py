@@ -42,7 +42,14 @@ def cluster_assignment(X, C1, C2, metric='euclidean'):
 
     return nu_1, nu_2
 
-def likelihood(nu, N, k):
+
+def likelihood(X1train, X2train, C1, C2, metric="cosine"):
+
+    # Syntax for cluster assignments: nu_rs. r is the index of the codebook (C1 or  C2). s is the index of the window (or segment) class, preictal (s=1) or  interictal (s=2).
+    nu_11, nu_21 = cluster_assignment(X1train, C1, C2, metric=metric)
+    nu_12, nu_22 = cluster_assignment(X2train, C1, C2, metric=metric)
+    nu = nu_11, nu_21, nu_12, nu_22
+    N1, N2 = X1train.shape[0], X2train.shape[0]  # Number of windows
     
     # r=1, s=1
     nu_11, counts = np.unique(nu[0], return_counts=True)
