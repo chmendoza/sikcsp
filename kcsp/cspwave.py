@@ -3,7 +3,6 @@ import os
 import sys
 import numpy as np
 import time
-from numpy.core.fromnumeric import trace
 import yaml
 from argparse import ArgumentParser
 
