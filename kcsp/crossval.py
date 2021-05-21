@@ -23,7 +23,7 @@ def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 def _single_fold(params, X, iter_args):
     """ A single fold in a k-fold crossvalidation """
 
-    winlen = params['Data']['Window length']
+    winlen = params['Window length']
     metric = params['Algorithm']['metric']
     init = params['Algorithm']['init']
     n_runs = params['Algorithm']['n_runs']
@@ -197,8 +197,10 @@ def main():
     ss = rng.bit_generator._seed_seq
     child_seeds = ss.spawn(n_folds)
 
-    child_params = dict.fromkeys(['Data', 'Algorithm'])
-    child_params['Data']['Window length'] = winlen
+    child_params = dict.fromkeys(['Window length', 'Algorithm'])
+    child_params['Window length'] = winlen
+    child_params['Algorithm'] = dict.fromkeys(
+        ['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length'])
     child_params['Algorithm']['metric'] = metric
     child_params['Algorithm']['init'] = init
     child_params['Algorithm']['n_runs'] = n_runs
