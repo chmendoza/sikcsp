@@ -31,12 +31,13 @@ parser.add_argument("--bands", dest="bands", type=int, action="append",
 args = parser.parse_args()
 
 params = dict.fromkeys(
-    ['Patient dir', 'Results dir', 'Filenames', 'n_folds', 'Data', 'Algorithm'])
+    ['Patient dir', 'Results dir', 'Filenames', 'n_folds',\
+        'Data', 'Algorithm', 'Random seed'])
 params['Filenames'] = dict.fromkeys(
     ['CSP filters', 'Data indices', 'Results'])
 params['Data'] = dict.fromkeys(
     ['Segment length', 'Window length', 'Index of CSP filters'])
-params['Algorithm'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length', 'rng_seed'])
+params['Algorithm'] = dict.fromkeys(['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length'])
 
 params['n_folds'] = 10
 
@@ -109,10 +110,7 @@ for i_patient, patient in enumerate(patients):
                 params['Filenames']['Results'] = rfname
                     
                 params['Algorithm']['n_clusters'] = k
-                params['Algorithm']['centroid_length'] = P
-                # A different random seed is passed to the shift-invariant -means algorithm on each fold
-                seed = np.random.SeedSequence()
-                params['Algorithm']['rng_seed'] = seed.entropy
+                params['Algorithm']['centroid_length'] = P                
                 confname = 'band%d_%s_k%d-%d_P%d-%d.yaml' % (
                     band, method, *k, *P)
                 confpath = os.path.join(confdir, patient, confname)

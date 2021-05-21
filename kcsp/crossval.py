@@ -145,13 +145,13 @@ def main():
     n_runs = params['Algorithm']['n_runs']
     k1, k2 = params['Algorithm']['n_clusters']
     P1, P2 = params['Algorithm']['centroid_length']
-    init_seed = params['Algorithm']['rng_seed']
+    seed = params['Random seed']
 
     #%% Random generator
-    seed = np.random.SeedSequence(init_seed)
+    seed = np.random.SeedSequence(seed)
     print('Initial random seed: %s' % seed.entropy)
     rng = np.random.default_rng(seed)
-    if init_seed is None:
+    if seed is None:
         print('Saving initial seed to disk...')
         params['init_seed'] = seed.entropy
         with open(confpath, 'w') as yamfile:
@@ -186,9 +186,6 @@ def main():
     toc = time.perf_counter()
     print("Data gathered and filtered after %0.4f seconds" % (toc - tic))
 
-    seed = np.random.SeedSequence()
-    params['Crossvalidation']['rng_seed'] = seed.entropy
-    rng = np.random.default_rng(seed)
     kfold1 = utils.kfold_split(
         n_samples[0], n_folds, shuffle=True, rng=rng)
     kfold2 = utils.kfold_split(
@@ -198,7 +195,7 @@ def main():
 
     # For each fold, pass a different seed to the shift-invariant k-means algo
     ss = rng.bit_generator._seed_seq
-    child_seeds = ss.spawn(n_folds)  # pass this to _single_fold() params
+    child_seeds = ss.spawn(n_folds)
 
     child_params = dict.fromkeys(['Data', 'Algorithm'])
     child_params['Data']['Window length'] = winlen
