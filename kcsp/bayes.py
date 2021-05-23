@@ -45,43 +45,44 @@ def cluster_assignment(X, C1, C2, metric='euclidean'):
 
 def likelihood(X1train, X2train, C1, C2, metric="cosine"):
 
+    k1, k2 = C1.shape[0], C2.shape[0]
+
     # Syntax for cluster assignments: nu_rs. r is the index of the codebook (C1 or  C2). s is the index of the window (or segment) class, preictal (s=1) or  interictal (s=2).
     nu_11, nu_21 = cluster_assignment(X1train, C1, C2, metric=metric)
     nu_12, nu_22 = cluster_assignment(X2train, C1, C2, metric=metric)
-    nu = nu_11, nu_21, nu_12, nu_22
     N1, N2 = X1train.shape[0], X2train.shape[0]  # Number of windows
     
     # r=1, s=1
-    nu_11, counts = np.unique(nu[0], return_counts=True)
-    p_C1 = np.zeros(k[0])
+    nu_11, counts = np.unique(nu_11, return_counts=True)
+    p_C1 = np.zeros(k1)
     p_C1[nu_11] = counts
-    p_C1 = p_C1/N[0]
+    p_C1 = p_C1/N1
 
     # r=2, s=1    
-    nu_21, counts = np.unique(nu[1], return_counts=True)
-    p_C2 = np.zeros(k[1])
+    nu_21, counts = np.unique(nu_21, return_counts=True)
+    p_C2 = np.zeros(k2)
     p_C2[nu_21] = counts
-    p_C2 = p_C2/N[0]
+    p_C2 = p_C2/N1
 
-    p_C = np.zeros((2,k[0],k[1]))
-    p_C1 = p_C1.reshape(k[0], 1)
-    p_C2 = p_C2.reshape(1, k[1])
+    p_C = np.zeros((2,k1,k2))
+    p_C1 = p_C1.reshape(k1, 1)
+    p_C2 = p_C2.reshape(1, k2)
     p_C[0] = np.matmul(p_C1, p_C2) # (k1, k2), given S=1
 
     # r=1, s=2    
-    nu_12, counts = np.unique(nu[2], return_counts=True)
-    p_C1 = np.zeros(k[0])
+    nu_12, counts = np.unique(nu_12, return_counts=True)
+    p_C1 = np.zeros(k1)
     p_C1[nu_12] = counts
-    p_C1 = p_C1/N[1]
+    p_C1 = p_C1/N2
 
     # r=2, s=2    
-    nu_22, counts = np.unique(nu[3], return_counts=True)
-    p_C2 = np.zeros(k[1])
+    nu_22, counts = np.unique(nu_22, return_counts=True)
+    p_C2 = np.zeros(k2)
     p_C2[nu_22] = counts
-    p_C2 = p_C2/N[1]
+    p_C2 = p_C2/N2
 
-    p_C1 = p_C1.reshape(k[0], 1)
-    p_C2 = p_C2.reshape(1, k[1])
+    p_C1 = p_C1.reshape(k1, 1)
+    p_C2 = p_C2.reshape(1, k2)
     p_C[1] = np.matmul(p_C1, p_C2)  # (k1, k2), given S=2
 
     return p_C
