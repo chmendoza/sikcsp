@@ -145,13 +145,13 @@ def main():
     n_runs = params['Algorithm']['n_runs']
     k1, k2 = params['Algorithm']['n_clusters']
     P1, P2 = params['Algorithm']['centroid_length']
-    seed = params['Random seed']
+    init_seed = params['Random seed']
 
     #%% Random generator
-    seed = np.random.SeedSequence(seed)
+    seed = np.random.SeedSequence(init_seed)
     print('Initial random seed: %s' % seed.entropy)
     rng = np.random.default_rng(seed)
-    if seed is None:
+    if init_seed is None:
         print('Saving initial seed to disk...')
         params['init_seed'] = seed.entropy
         with open(confpath, 'w') as yamfile:
