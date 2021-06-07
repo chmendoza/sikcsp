@@ -8,81 +8,81 @@ sys.path.insert(0,
 from shift_kmeans.wrappers import si_pairwise_distances_argmin_min, si_row_norms
 
 
-def cluster_assignment(X, C1, C2, metric='euclidean'):
-    """ Cluster assingment using dictionaries from two classes
+def cluster_assignment(X, C, metric='euclidean'):
+    """ Cluster assingment using a given codebook
 
-    Find the closest centroid in C1 and C2 to the observations (rows) in X, and assign the corresponding cluster labels to those observations. C1 and C2 are  and 2, respectively.
+    Find the closest centroid in C to the observations (rows) in X, and assign the corresponding cluster labels to those observations.
 
     Parameters
     ----------
     X (array):
         A data matrix. Rows are observations. X.shape = (m, n).
-    C1 (array):
-        Shift-invariant dictionary of waveforms (rows) from class 1. C1.shape = (m1, P1). P1 <= n.
-    C2 (array):
-        Shift-invariant dictionary of waveforms (rows) from class 2. C2.shape = (m2, P2). P2 <= n.
+    C (array):
+        Shift-invariant codebook of waveforms (rows). C.shape = (m, P). P <= n.   
 
     Returns
     -------
-    nu_1 (array):
-        Cluster labels of observations in X, using the dictionary C1.
-    nu_2 (array):
-        Cluster labels of observations in X, using the dictionary C2.
+    nu (array):
+        Cluster labels of observations in X, using the codebook C.    
     """
 
-    P1 = C1.shape[1]  # centroid length
-    P2 = C2.shape[1]
+    P = C.shape[1]  # centroid length    
     XX = None
 
     if metric == 'euclidean':
-        XX = si_row_norms(X, P1, squared=True)
+        XX = si_row_norms(X, P, squared=True)
     
-    nu_1, _, _ = si_pairwise_distances_argmin_min(X, C1, metric, XX)
-    nu_2, _, _ = si_pairwise_distances_argmin_min(X, C2, metric, XX)
+    nu, _, _ = si_pairwise_distances_argmin_min(X, C, metric, XX)
 
-    return nu_1, nu_2
+    return nu
 
 
-def likelihood(X1train, X2train, C1, C2, metric="cosine"):
+def likelihood(X, C, metric="cosine"):
+    """
+    Conditional probability of a cluster assignment pair
 
-    k1, k2 = C1.shape[0], C2.shape[0]
+    Compute joint likelihood of cluster assignments of a segment using two 
+    codebooks and given the class of the segment.
 
-    # Syntax for cluster assignments: nu_rs. r is the index of the codebook (C1 or  C2). s is the index of the window (or segment) class, preictal (s=1) or  interictal (s=2).
-    nu_11, nu_21 = cluster_assignment(X1train, C1, C2, metric=metric)
-    nu_12, nu_22 = cluster_assignment(X2train, C1, C2, metric=metric)
-    N1, N2 = X1train.shape[0], X2train.shape[0]  # Number of windows
+    Parameters
+    ----------
+    X (sequence):
+        A sequence (e.g., list) of two numpy arrays. X[0] is an l x n1 x m1
+        matrix with preictal windows, with l1, n1, and m1 being the number of 
+        CSP filters, the number of windows, and the window length. X[1] is an
+        l x n2 x m2 matrix with interictal windows. X[:][0] is the first CSP 
+        filter, optimized for preictal windows, and X[:][1] is the last CSP 
+        filter, optimized for interictal windows.
+    C (sequence):
+        A sequence of two codebooks. C[0] is the preictal codebook and C[1] is 
+        the interictal codebook. C[0].shape = (k1, P1) and C[1].shape = 
+        (k2, P2), with k1,k2 being the number of centroids on each codebook, and P1,P2 being the centroid lenghts.
     
-    # r=1, s=1
-    nu_11, counts = np.unique(nu_11, return_counts=True)
-    p_C1 = np.zeros(k1)
-    p_C1[nu_11] = counts
-    p_C1 = p_C1/N1
+    Returns
+    -------
+    joint_like (array):
+        A (2,k1,k2) array with the joint likelihood of the cluster assignments.
+        For a given class, each window is filtered with both CSP filters and then clustered with the corresponding codebook. For example, a preictal window is filtered with CSP-1 (first filter) and clustered using C[0], and filtered with CSP-C (last filter) and clustered using C[1].
 
-    # r=2, s=1    
-    nu_21, counts = np.unique(nu_21, return_counts=True)
-    p_C2 = np.zeros(k2)
-    p_C2[nu_21] = counts
-    p_C2 = p_C2/N1
+    TODO: How to extend this to more than two CSP filters?
+    """
 
-    p_C = np.zeros((2,k1,k2))
-    p_C1 = p_C1.reshape(k1, 1)
-    p_C2 = p_C2.reshape(1, k2)
-    p_C[0] = np.matmul(p_C1, p_C2) # (k1, k2), given S=1
+    n_clusters, n_samples = np.zeros(2), np.zeros(2)
+    
+    n_clusters[0], n_clusters[1] = C[0].shape[0], C[1].shape[0] # k1, k2
+    n_samples[0], n_samples[1] = X[0].shape[0], X[1].shape[0]
 
-    # r=1, s=2    
-    nu_12, counts = np.unique(nu_12, return_counts=True)
-    p_C1 = np.zeros(k1)
-    p_C1[nu_12] = counts
-    p_C1 = p_C1/N2
+    marginal_like = [0] * 2
+    joint_like = np.zeros((2, n_clusters[0], n_clusters[1]))
 
-    # r=2, s=2    
-    nu_22, counts = np.unique(nu_22, return_counts=True)
-    p_C2 = np.zeros(k2)
-    p_C2[nu_22] = counts
-    p_C2 = p_C2/N2
-
-    p_C1 = p_C1.reshape(k1, 1)
-    p_C2 = p_C2.reshape(1, k2)
-    p_C[1] = np.matmul(p_C1, p_C2)  # (k1, k2), given S=2
-
-    return p_C
+    for s in np.arange(2):  # segment class        
+        for r in np.arange(2): # codebook (CSP filter) class 
+            nu = cluster_assignment(X[s][r], C[r], metric=metric)
+            nu, counts = np.unique(nu, return_counts=True)
+            marginal_like[r] = np.zeros(n_clusters[r])
+            marginal_like[r][nu] = counts/n_samples[s]            
+        joint_like[s] = np.matmul(\
+            marginal_like[0].reshape(-1, 1),\
+            marginal_like[1].reshape(1, -1))  # (k1, k2), given S=s
+        
+    return joint_like
