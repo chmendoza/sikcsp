@@ -48,7 +48,7 @@ def _single_fold(params, X, iter_args):
     Xtrain[0] = utils.splitdata(X[0][:,train1], winlen)
     Xtrain[1] = utils.splitdata(X[1][:,train2], winlen)   
 
-    # Training begins    
+    # Training begins
     C1, _, _, _, _, _ = sikmeans.shift_invariant_k_means(
         Xtrain[0][0], k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng,  verbose=True)
     C2, _, _, _, _, _ = sikmeans.shift_invariant_k_means(
@@ -172,7 +172,7 @@ def main():
     rng = np.random.default_rng(seed)
     if init_seed is None:
         print('Saving initial seed to disk...')
-        params['init_seed'] = seed.entropy
+        params['Random seed'] = seed.entropy
         with open(confpath, 'w') as yamfile:
             yaml.dump(params, yamfile, sort_keys=False)
 
