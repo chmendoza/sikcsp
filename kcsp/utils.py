@@ -94,7 +94,8 @@ def _get_CSPdata_single(i_epoch):
     row = np.arange(n_chan).reshape(1, -1, 1)    
     windows = epoch[row, col]  # (n_win[i_epoch], n_chan, winlen)    
 
-    return np.matmul(W.T, windows)
+    # matmul treats `windows` as a stack of 2D matrices residing in the last two indices
+    return np.matmul(W.T, windows) # (n_win[i_epoch], n_csp, winlen)
 
 def getCSPdata(dirpath, dfname, i_start, winlen, W, n_cpus=1):
     """
