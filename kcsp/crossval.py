@@ -41,61 +41,80 @@ def _single_fold(params, X, iter_args):
     train2, test2 = kfold_interictal
 
     # Split (cross-validation) training segments into smaller windows
-    X1train = utils.splitdata(X[0][train1], winlen)  # preictal
-    X2train = utils.splitdata(X[1][train2], winlen)  # interictal   
+    Xtrain = [0] * 2
+    # Xtrain[0][0]: Preictal data filtered with CSP filter optimized for
+    # preictal.
+    # Xtrain[0][1]: Preictal data, interictal CSP filter
+    Xtrain[0] = utils.splitdata(X[0][:,train1], winlen)
+    Xtrain[1] = utils.splitdata(X[1][:,train2], winlen)   
 
-    # Training
+    # Training begins    
     C1, _, _, _, _, _ = sikmeans.shift_invariant_k_means(
-        X1train, k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng,  verbose=True)
+        Xtrain[0][0], k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng,  verbose=True)
     C2, _, _, _, _, _ = sikmeans.shift_invariant_k_means(
-        X2train, k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng,  verbose=True)
+        Xtrain[1][1], k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng,  verbose=True)
 
     # Estimate likelihood and prior
-    p_C = bayes.likelihood(X1train, X2train, C1, C2, metric=metric)  # (2,k1,k2)
-    N1, N2 = X1train.shape[0], X2train.shape[0]  # Number of windows
+    p_C = bayes.likelihood(Xtrain, (C1,C2), metric=metric) #(2,k1,k2)
+    N1, N2 = Xtrain[0].shape[0], Xtrain[1].shape[0]  # Number of windows
     p_S = np.zeros(2)
     p_S[0] = N1/(N1+N2)
     p_S[1] = N2/(N1+N2)
 
-    # Split (crossval) test segments into smaller windows
-    X1test = utils.splitdata(X[0][test1], winlen, keep_dims=False)  # preictal
-    X2test = utils.splitdata(
-        X[1][test2], winlen, keep_dims=False)  # Interictal
+    # Training ends, Testing begins
 
-    # Concatenate segments from both classes
-    Xtest = np.concatenate((X1test, X2test), axis=0)
-    M_bar1, M_bar2 = X1test.shape[0], X2test.shape[0]  # Number of segments
-    del X1test, X2test
-
-    # True label vector
-    s = np.r_[np.ones(M_bar1, dtype=int), 2 * np.ones(M_bar2, dtype=int)]
-    M_bar = M_bar1 + M_bar2  # Total number of test segments
+    # Number of test segments
+    n_seg = np.zeros(2)
+    n_seg[0], n_seg[1] = test1.size, test2.size
+    
+    # Concatenate preictal and interictal data filtered with CSP-1
+    X1test = np.concatenate(X[0][0,test1], X[1][0,test2], axis=0)
+    # Concatenate preictal and interictal data filtered with CSP-C
+    X2test = np.concatenate(X[0][1,test1], X[1][1,test2], axis=0)
+    
+    # Split (crossval) test segments into smaller windows. This creates a 3D 
+    # matrix with the smaller windows (2D matrices) lying in the last two 
+    # indices and the first axis indexing the segments.
+    X1test = utils.splitdata(X1test, winlen, keep_dims=False)
+    X2test = utils.splitdata(X2test, winlen, keep_dims=False)
 
     # Initialize estimated label, s_hat
-    s_hat = np.zeros((2, M_bar), dtype=int)
+    n_seg = np.zeros(2)
+    n_seg[0], n_seg[1] = X1test.shape[0], X2test.shape[0]  # Number of segments
+    tot_n_seg = n_seg[0] + n_seg[1]  # Total number of test segments
+    s_hat = np.zeros((2, tot_n_seg), dtype=int)
 
     # Predict class label using MAP and ML
     likelihood_weights = np.ones_like(p_S) * 0.5
-    for i_segment in np.arange(M_bar):
-        nu_1, nu_2 = bayes.cluster_assignment(
-            Xtest[i_segment], C1, C2, metric=metric)
-        M = Xtest[i_segment].shape[0]  # Num. of windows on a segment
-        # Log-posterior:
-        evalp_C = p_C[:, nu_1, nu_2]  # Eval likelihood at cluster assingment pairs
-        # Avoid divide-by-zero warning:
-        logp_C = np.full((2, nu_1.size), np.NINF)
+    for i_segment in np.arange(tot_n_seg):
+        
+        # Cluster assingments for windows in a segment of unknown class, 
+        # filtered with CSP-1 and using the preictal codebook:
+        nu_1 = bayes.cluster_assignment(X1test[i_segment], C1, metric=metric)
+        # Cluster assingments of data filtered with CSP-C and using the 
+        # interictal codebook:
+        nu_2 = bayes.cluster_assignment(X2test[i_segment], C2, metric=metric)
+
+        # Compute log-likelihood
+        evalp_C = p_C[:, nu_1, nu_2] # Eval learned likelihood
+        logp_C = np.full((2, nu_1.size), np.NINF) # Avoid divide-by-zero warning
         np.log(evalp_C, out=logp_C, where=evalp_C > 0)
+        M = X1test[i_segment].shape[0]  # Num. of windows on a segment
         logMAP = M*np.log(p_S) + np.sum(logp_C, axis=1)
         logML = M*np.log(likelihood_weights) + np.sum(logp_C, axis=1)
-        # add 1 to convert array element index to class label
-        s_hat[0, i_segment] = np.argmax(logMAP) + 1
+        
+        # Find MAP and ML estimate
+        s_hat[0, i_segment] = np.argmax(logMAP) + 1 # array index to class label
         s_hat[1, i_segment] = np.argmax(logML) + 1
+
+    # True label vector
+    s = np.r_[np.ones(n_seg[0], dtype=int), 2 * np.ones(n_seg[1], dtype=int)]
 
     # Compute Matthews correlation coefficient (MCC)
     # Assume that the positive class (preictal) is the minority class and that the  negative class (interictal) is the majority class. Also, there are always examples from both classes.
     MCC = np.zeros(2)    
     confmat = [0]*2
-    for ii in np.arange(2):
+    for ii in np.arange(2): # loop over {MAP, ML}
         confmat[ii] = utils.confusion_matrix(s, s_hat[ii, :])
         tp, fn, fp, tn = confmat[ii].flatten()        
         if (tp == 0 and fp == 0) or (tn == 0 and fn == 0):
@@ -160,6 +179,7 @@ def main():
     #%% Get the CSP filters
     wpath = os.path.join(patient_dir, wfname)
     W = utils.loadmat73(wpath, 'W')
+    i_csp = np.array(i_csp)
     W = W[:, i_csp]
 
     #%% Extract data and apply CSP filter
