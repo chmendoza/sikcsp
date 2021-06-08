@@ -37,16 +37,22 @@ def _single_fold(params, X, iter_args):
     rng = np.random.default_rng(seed)
 
     ## Get indices of one cross-validation fold
-    train1, test1 = kfold_preictal
-    train2, test2 = kfold_interictal
+    train_ind, test_ind = [0]*2, [0]*2
+    train_ind[0], test_ind[0] = kfold_preictal
+    train_ind[1], test_ind[1] = kfold_interictal
 
     # Split (cross-validation) training segments into smaller windows
+    # Number of segments
+    n_seg = np.zeros(2)
+    n_seg[0], n_seg[1] = train_ind[0].size, train_ind[1].size
+    n_csp, _, seglen = X[0].shape
+    n_win_per_seg = seglen // winlen    
     Xtrain = [0] * 2
-    # Xtrain[0][0]: Preictal data filtered with CSP filter optimized for
-    # preictal.
-    # Xtrain[0][1]: Preictal data, interictal CSP filter
-    Xtrain[0] = utils.splitdata(X[0][:,train1], winlen)
-    Xtrain[1] = utils.splitdata(X[1][:,train2], winlen)   
+    for s in range(2):  # class segment
+        n_win = n_win_per_seg * n_seg[s]
+        Xtrain[s] = np.zeros((n_csp, n_win, winlen))
+        for r in range(2): # CSP filter
+            Xtrain[s][r] = utils.splitdata(X[0][r, train_ind[s]], winlen)
 
     # Training begins
     C1, _, _, _, _, _ = sikmeans.shift_invariant_k_means(
@@ -63,14 +69,14 @@ def _single_fold(params, X, iter_args):
 
     # Training ends, Testing begins
 
-    # Number of test segments
+    # Number of segments
     n_seg = np.zeros(2)
-    n_seg[0], n_seg[1] = test1.size, test2.size
+    n_seg[0], n_seg[1] = test_ind[0].size, test_ind[1].size
     
     # Concatenate preictal and interictal data filtered with CSP-1
-    X1test = np.concatenate(X[0][0,test1], X[1][0,test2], axis=0)
+    X1test = np.concatenate(X[0][0,test_ind[0]], X[1][0,test_ind[1]], axis=0)
     # Concatenate preictal and interictal data filtered with CSP-C
-    X2test = np.concatenate(X[0][1,test1], X[1][1,test2], axis=0)
+    X2test = np.concatenate(X[0][1,test_ind[0]], X[1][1,test_ind[1]], axis=0)
     
     # Split (crossval) test segments into smaller windows. This creates a 3D 
     # matrix with the smaller windows (2D matrices) lying in the last two 
