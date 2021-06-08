@@ -43,7 +43,7 @@ def _single_fold(params, X, iter_args):
 
     # Split (cross-validation) training segments into smaller windows
     # Number of segments
-    n_seg = np.zeros(2)
+    n_seg = np.zeros(2, dtype=int)
     n_seg[0], n_seg[1] = train_ind[0].size, train_ind[1].size
     n_csp, _, seglen = X[0].shape
     n_win_per_seg = seglen // winlen    
@@ -85,7 +85,7 @@ def _single_fold(params, X, iter_args):
     X2test = utils.splitdata(X2test, winlen, keep_dims=False)
 
     # Initialize estimated label, s_hat
-    n_seg = np.zeros(2)
+    n_seg = np.zeros(2, dtype=int)
     n_seg[0], n_seg[1] = X1test.shape[0], X2test.shape[0]  # Number of segments
     tot_n_seg = n_seg[0] + n_seg[1]  # Total number of test segments
     s_hat = np.zeros((2, tot_n_seg), dtype=int)
