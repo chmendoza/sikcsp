@@ -1,6 +1,7 @@
 import os, sys
 import yaml
 import numpy as np
+import scipy.io as sio
 from argparse import ArgumentParser
 
 
@@ -50,7 +51,6 @@ method = methods[0]
 srate = 512 # Hz
 params['Data']['Segment length'] = srate * 60 # 1 minute
 params['Data']['Window length'] = srate * 1  # 1 second
-params['Data']['Index of CSP filters'] = 1
 
 conditions = ['preictal', 'interictal']
 bands = args.bands
@@ -81,9 +81,18 @@ dfname = 'split_%s_winlen-%d_gap-%d.mat' % (overlap_str, winlen, start_gap)
 params['Filenames']['Data indices'] = dfname
 
 for i_patient, patient in enumerate(patients):
+
+    # Define index of CSP filters based on # of channels
+    dirpath = os.path.join(patient_dir)
+    fpath = os.path.join(dirpath, 'metadata.mat')
+    metadata = sio.loadmat(fpath, simplify_cells=True)
+    n_chan = metadata['metadata']['channel_labels'].size  # num. of channels
+    params['Data']['Index of CSP filters'] = [0, n_chan]
+
     patient = patient[0] # list -> str
     patient_dir = os.path.join(data_dir, patient)
     n_samples = [0] * 2 # Num. of training samples [preictal, interictal]
+    
     for i_condition, condition in enumerate(conditions):
         # file names and start indices of segments
         dirpath = os.path.join(patient_dir, condition)
