@@ -82,16 +82,16 @@ params['Filenames']['Data indices'] = dfname
 
 for i_patient, patient in enumerate(patients):
 
+    patient = patient[0]  # list -> str
+    patient_dir = os.path.join(data_dir, patient)
+    n_samples = [0] * 2  # Num. of training samples [preictal, interictal]
+
     # Define index of CSP filters based on # of channels
     dirpath = os.path.join(patient_dir)
     fpath = os.path.join(dirpath, 'metadata.mat')
     metadata = sio.loadmat(fpath, simplify_cells=True)
     n_chan = metadata['metadata']['channel_labels'].size  # num. of channels
-    params['Data']['Index of CSP filters'] = [0, n_chan]
-
-    patient = patient[0] # list -> str
-    patient_dir = os.path.join(data_dir, patient)
-    n_samples = [0] * 2 # Num. of training samples [preictal, interictal]
+    params['Data']['Index of CSP filters'] = [0, n_chan]    
     
     for i_condition, condition in enumerate(conditions):
         # file names and start indices of segments
