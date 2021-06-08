@@ -91,7 +91,7 @@ for i_patient, patient in enumerate(patients):
     fpath = os.path.join(dirpath, 'metadata.mat')
     metadata = sio.loadmat(fpath, simplify_cells=True)
     n_chan = metadata['metadata']['channel_labels'].size  # num. of channels
-    params['Data']['Index of CSP filters'] = [0, n_chan]    
+    params['Data']['Index of CSP filters'] = [0, n_chan-1]    
     
     for i_condition, condition in enumerate(conditions):
         # file names and start indices of segments
