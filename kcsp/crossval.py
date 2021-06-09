@@ -52,7 +52,7 @@ def _single_fold(params, X, iter_args):
         n_win = n_win_per_seg * n_seg[s]
         Xtrain[s] = np.zeros((n_csp, n_win, winlen))
         for r in range(2): # CSP filter
-            Xtrain[s][r] = utils.splitdata(X[0][r, train_ind[s]], winlen)
+            Xtrain[s][r] = utils.splitdata(X[s][r, train_ind[s]], winlen)
 
     # Training begins
     C1, _, _, _, _, _ = sikmeans.shift_invariant_k_means(
