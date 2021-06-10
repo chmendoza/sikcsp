@@ -67,7 +67,7 @@ def likelihood(X, C, metric="cosine"):
     TODO: How to extend this to more than two CSP filters?
     """
 
-    n_clusters, n_samples = np.zeros(2), np.zeros(2)
+    n_clusters, n_samples = np.zeros(2, dtype=int), np.zeros(2, dtype=int)
     
     n_clusters[0], n_clusters[1] = C[0].shape[0], C[1].shape[0] # k1, k2
     n_samples[0], n_samples[1] = X[0].shape[0], X[1].shape[0]
