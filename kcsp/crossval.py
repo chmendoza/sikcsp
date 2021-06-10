@@ -68,11 +68,7 @@ def _single_fold(params, X, iter_args):
     p_S[1] = N2/(N1+N2)
 
     # Training ends, Testing begins
-
-    # Number of segments
-    n_seg = np.zeros(2)
-    n_seg[0], n_seg[1] = test_ind[0].size, test_ind[1].size
-    
+          
     # Concatenate preictal and interictal data filtered with CSP-1
     X1test = np.concatenate(X[0][0,test_ind[0]], X[1][0,test_ind[1]], axis=0)
     # Concatenate preictal and interictal data filtered with CSP-C
