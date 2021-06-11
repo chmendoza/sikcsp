@@ -70,9 +70,9 @@ def _single_fold(params, X, iter_args):
     # Training ends, Testing begins
           
     # Concatenate preictal and interictal data filtered with CSP-1
-    X1test = np.concatenate(X[0][0,test_ind[0]], X[1][0,test_ind[1]], axis=0)
+    X1test = np.concatenate((X[0][0,test_ind[0]], X[1][0,test_ind[1]]), axis=0)
     # Concatenate preictal and interictal data filtered with CSP-C
-    X2test = np.concatenate(X[0][1,test_ind[0]], X[1][1,test_ind[1]], axis=0)
+    X2test = np.concatenate((X[0][1,test_ind[0]], X[1][1,test_ind[1]]), axis=0)
     
     # Split (crossval) test segments into smaller windows. This creates a 3D 
     # matrix with the smaller windows (2D matrices) lying in the last two 
