@@ -81,14 +81,12 @@ def _single_fold(params, X, iter_args):
     X2test = utils.splitdata(X2test, winlen, keep_dims=False)
 
     # Initialize estimated label, s_hat
-    n_seg = np.zeros(2, dtype=int)
-    n_seg[0], n_seg[1] = X1test.shape[0], X2test.shape[0]  # Number of segments
-    tot_n_seg = n_seg[0] + n_seg[1]  # Total number of test segments
-    s_hat = np.zeros((2, tot_n_seg), dtype=int)
+    n_seg = X1test.shape[0]  # Number of test segments
+    s_hat = np.zeros((2, n_seg), dtype=int)
 
     # Predict class label using MAP and ML
     likelihood_weights = np.ones_like(p_S) * 0.5
-    for i_segment in np.arange(tot_n_seg):
+    for i_segment in np.arange(n_seg):
         
         # Cluster assingments for windows in a segment of unknown class, 
         # filtered with CSP-1 and using the preictal codebook:
@@ -110,7 +108,8 @@ def _single_fold(params, X, iter_args):
         s_hat[1, i_segment] = np.argmax(logML) + 1
 
     # True label vector
-    s = np.r_[np.ones(n_seg[0], dtype=int), 2 * np.ones(n_seg[1], dtype=int)]
+    s = np.r_[np.ones(test_ind[0].size, dtype=int), \
+        2 * np.ones(test_ind[1].size, dtype=int)]
 
     # Compute Matthews correlation coefficient (MCC)
     # Assume that the positive class (preictal) is the minority class and that the  negative class (interictal) is the majority class. Also, there are always examples from both classes.
