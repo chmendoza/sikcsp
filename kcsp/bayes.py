@@ -70,7 +70,7 @@ def likelihood(X, C, metric="cosine"):
     n_clusters, n_samples = np.zeros(2, dtype=int), np.zeros(2, dtype=int)
     
     n_clusters[0], n_clusters[1] = C[0].shape[0], C[1].shape[0] # k1, k2
-    n_samples[0], n_samples[1] = X[0].shape[0], X[1].shape[0]
+    n_samples[0], n_samples[1] = X[0].shape[1], X[1].shape[1]
 
     marginal_like = [0] * 2
     joint_like = np.zeros((2, n_clusters[0], n_clusters[1]))
