@@ -62,7 +62,7 @@ def _single_fold(params, X, iter_args):
 
     # Estimate likelihood and prior
     p_C = bayes.likelihood(Xtrain, (C1,C2), metric=metric) #(2,k1,k2)
-    N1, N2 = Xtrain[0].shape[0], Xtrain[1].shape[0]  # Number of windows
+    N1, N2 = Xtrain[0].shape[1], Xtrain[1].shape[1]  # Number of windows
     p_S = np.zeros(2)
     p_S[0] = N1/(N1+N2)
     p_S[1] = N2/(N1+N2)
