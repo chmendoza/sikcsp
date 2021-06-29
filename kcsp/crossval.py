@@ -119,9 +119,9 @@ def _single_fold(params, X, iter_args):
         confmat[ii] = utils.confusion_matrix(s, s_hat[ii, :])
         tp, fn, fp, tn = confmat[ii].flatten()        
         if (tp == 0 and fp == 0) or (tn == 0 and fn == 0):
-            MCC[ii] += 0            
+            MCC[ii] = 0            
         else:            
-            MCC[ii] += (tp * tn - fp * fn) /\
+            MCC[ii] = (tp * tn - fp * fn) /\
                 np.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
 
     return MCC
