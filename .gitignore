@@ -1,4 +1,5 @@
 shift_kmeans_cupy/
+private/
 .*
 __pycache__/
 *.py[cod]
