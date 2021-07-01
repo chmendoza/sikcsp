@@ -6,8 +6,7 @@ import numpy as np
 import time
 from numpy.lib.function_base import median
 import yaml
-import functools
-import multiprocessing
+import ray
 from argparse import ArgumentParser
 
 # Add path to package directory to access main module using absolute import
@@ -20,6 +19,7 @@ import shift_kmeans.shift_kmeans as sikmeans
 
 def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 
+@ray.remote
 def _single_fold(params, X, iter_args):
     """ A single fold in a k-fold crossvalidation """
 
@@ -139,6 +139,8 @@ def main():
     args = parser.parse_args()
     n_cpus = args.n_cpus
 
+    ray.init(num_cpus=n_cpus)
+
     os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
 
     #%% Read paramaters to set up the experiment
@@ -210,9 +212,7 @@ def main():
     kfold1 = utils.kfold_split(
         n_samples[0], n_folds, shuffle=True, rng=rng)
     kfold2 = utils.kfold_split(
-        n_samples[1], n_folds, shuffle=True, rng=rng)
-    kfold1 = list(kfold1)
-    kfold2 = list(kfold2)
+        n_samples[1], n_folds, shuffle=True, rng=rng)    
 
     # For each fold, pass a different seed to the shift-invariant k-means algo
     ss = rng.bit_generator._seed_seq
@@ -227,18 +227,18 @@ def main():
     child_params['Algorithm']['n_runs'] = n_runs
     child_params['Algorithm']['n_clusters'] = k1, k2
     child_params['Algorithm']['centroid_length'] = P1, P2
+
+    X_ref = ray.put(X)
+    child_params_ref = ray.put(child_params)
     
-    _simple_single_fold = functools.partial(_single_fold, child_params, X)
-    iter_args = zip(kfold1, kfold2, child_seeds)
+    MCC_ref = []
+    for iter_args in zip(kfold1, kfold2, child_seeds):
+        MCC_ref.append(_single_fold.remote(
+            child_params_ref, X_ref, iter_args))
 
-    fullMCC = np.zeros((10,2))
-    chunksize = 1
-    with multiprocessing.Pool(n_cpus) as pool:
-        imap_it = pool.imap(_simple_single_fold, iter_args, chunksize)
-        for i_fold, MCC in enumerate(imap_it):
-            fullMCC[i_fold] = MCC
-
-    meanMCC = fullMCC.mean(axis=0)
+    MCC = ray.get(MCC_ref) # list of refs -> list of 1D arrays
+    MCC = np.vstack(MCC) # list of 1D arrays -> 2D array
+    meanMCC = MCC.mean(axis=0)
 
     rpath = os.path.join(results_dir, rfname)
     with open(rpath, 'wb') as f:

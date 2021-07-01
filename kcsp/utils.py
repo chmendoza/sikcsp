@@ -1,7 +1,7 @@
 import os
 import h5py
 import numpy as np
-import multiprocessing
+import ray
 import numbers
 import tracemalloc, linecache
 
@@ -76,26 +76,18 @@ def apply2list(obj, fun):
         return [apply2list(x, fun) for x in obj]
 
 
-## Get CSP data
-# Global variables to be shared by parallel processes spawned by getCSPdata()
-shared_dict = dict.fromkeys(['dirpath', 'dfname', 'i_start', 'winlen', 'W'])
-
-def _get_CSPdata_single(i_epoch):
-    dirpath = shared_dict['dirpath']
-    fname = shared_dict['dfname'][i_epoch]    
-    i_start = shared_dict['i_start'][i_epoch]
-    winlen = shared_dict['winlen']
-    W = shared_dict['W']
-
-    fpath = os.path.join(dirpath, fname)
+@ray.remote
+def _get_CSPdata_single(fpath, i_start, winlen, W):
+    
     n_chan = W.shape[0]
     epoch = loadmat73(fpath, 'epoch')
     col = np.reshape(i_start, (-1,1,1)) + np.arange(winlen).reshape(1, 1, -1)
     row = np.arange(n_chan).reshape(1, -1, 1)    
     windows = epoch[row, col]  # (n_win[i_epoch], n_chan, winlen)    
 
-    # matmul treats `windows` as a stack of 2D matrices residing in the last two indices
-    return np.matmul(W.T, windows) # (n_win[i_epoch], n_csp, winlen)
+    # matmul treats `windows` as a stack of 2D matrices residing in the last
+    # two indices. Final shape=(n_win[i_epoch], n_csp, winlen)
+    return np.matmul(W.T, windows)
 
 def getCSPdata(dirpath, dfname, i_start, winlen, W, n_cpus=1):
     """
@@ -124,44 +116,21 @@ def getCSPdata(dirpath, dfname, i_start, winlen, W, n_cpus=1):
         Matrix with CSP signals. X.shape=(n_csp, N, winlen), with N equal to the total number of windows.
     """
 
-    global shared_dict
-    shared_dict['dirpath'] = dirpath
-    shared_dict['dfname'] = dfname
-    shared_dict['i_start'] = i_start
-    shared_dict['winlen'] = winlen
-    shared_dict['W'] = W
+    n_epoch = len(dfname)    
+    X_ref = []
 
-    if W.ndim > 1:
-        n_csp = W.shape[1]
-    else:
-        n_csp = 1
-
-    n_epoch = len(dfname)
-    n_win = np.array([i_start[i].size for i in range(len(i_start))])
-    cumwin = np.r_[0, n_win.cumsum()]
-
-    X = np.empty((n_win.sum(), n_csp, winlen)).squeeze()
-
-    chunksize = 1
-    if n_cpus == 1: # single process
-        for i_epoch in range(n_epoch):
-            x = _get_CSPdata_single(i_epoch)
-            X[cumwin[i_epoch]:cumwin[i_epoch+1]] = x
-    else: # multiple processes
-        with multiprocessing.Pool(n_cpus) as pool:
-            imap_it = pool.imap(_get_CSPdata_single, range(n_epoch), chunksize)
-            for i_epoch, x in enumerate(imap_it):
-                X[cumwin[i_epoch]:cumwin[i_epoch+1]] = x
-
-    if n_csp > 1:
-        X = np.transpose(X, (1, 0, 2))
-
-    # Keep the dictionary layout, clear/save memory
-    shared_dict = dict.fromkeys(shared_dict.keys(), None)
+    #NOTE: pass W as ref (e.g. call ray.put)?
+    for i_epoch in range(n_epoch):
+        fpath = os.path.join(dirpath, dfname[i_epoch])
+        X_ref.append(_get_CSPdata_single.remote(
+            fpath, i_start[i_epoch], winlen, W))
+    
+    X = ray.get(X_ref) #list of refs -> list of numpy arrays
+    X = np.concatenate(X, axis=0) # list of 3D np arrays -> 3D array       
+    X = np.transpose(X, (1, 0, 2))
 
     return X
 
-## Cross-validation
 
 def check_rng(seed):
     """Turn seed into a np.random.Generator instance
