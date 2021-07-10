@@ -50,11 +50,14 @@ cfname = params['Filenames']['Codebooks']
 rfname = params['Filenames']['Results']
 winlen = params['Data']['Window length']
 seglen = params['Data']['Segment length']
+i_csp = params['Data']['Index of CSP filters']
 
 
 #%% Get the CSP filters
 wpath = os.path.join(patient_dir, wfname)
 W = utils.loadmat73(wpath, 'W')
+i_csp = np.array(i_csp)
+W = W[:, i_csp]
 
 i_start = [0]*2
 dfnames = [0]*2
@@ -76,37 +79,77 @@ for i_condition, condition in enumerate(conditions):
     X[i_condition] = utils.getCSPdata(
             dirpath, dfnames, i_start, seglen, W[:, i_condition], n_cpus=n_cpus)
 
-# Split training segments into smaller windows
-Xtest = [0]*2
-n_samples = np.zeros(2)
-Xtest[0] = utils.splitdata(X[0], winlen)  # preictal
-Xtest[1] = utils.splitdata(X[1], winlen)  # interictal
-n_samples[0] = Xtest[0].shape[0]
-n_samples[1] = Xtest[1].shape[0]
 
-# Load and concatenate learned codebooks
+# Concatenate preictal and interictal test data filtered with CSP-1
+X1test = np.concatenate((X[0][0], X[1][0]), axis=0)
+# Concatenate preictal and interictal test data filtered with CSP-C
+X2test = np.concatenate((X[0][1], X[1][1]), axis=0)
+
+# Split test segments into smaller windows and stack them vertically
+X1test = utils.splitdata(X1test, winlen)
+X2test = utils.splitdata(X2test, winlen)
+
+# Load learned codebooks
 cpath = os.path.join(patient_dir, cfname)
 data = np.load(cpath)
 C1, C2 = data['C1'], data['C2']
-C = np.concatenate((C1,C2), axis=0)
-n_centroids = C.shape[0]
-counts = np.zeros((n_centroids, 2))  # counts of centroids per condition
+
+n_centroids = C1.shape[0]  # Assume C1 and C2 have same number of centroids
+test_counts = np.zeros((n_centroids, 2))  # counts of centroids per codebook
 
 metric = 'cosine'
 XX = None
 nu_1, _, _ = si_pairwise_distances_argmin_min(
-    Xtest[0], C, metric, XX)
+    X1test, C1, metric, XX)
 nu_2, _, _ = si_pairwise_distances_argmin_min(
-    Xtest[1], C, metric, XX)
+    X2test, C2, metric, XX)
 uniq_1, cnts_1 = np.unique(nu_1, return_counts=True)
 uniq_2, cnts_2 = np.unique(nu_2, return_counts=True)
 
-counts[uniq_1, 0] = cnts_1
-counts[uniq_2, 1] = cnts_2
+# Number of test samples assigned to centroids from each codebook
+test_counts[uniq_1, 0] = cnts_1
+test_counts[uniq_2, 1] = cnts_2
 
-#np.savetxt(os.path.join(patient_dir, 'centroid_counts.csv'),
-#           counts, delimiter=",")
+# Split test segments into smaller windows
+X1test = utils.splitdata(X[0][0], winlen)  # preictal, filtered with CSP-1
+X2test = utils.splitdata(X[1][1], winlen)  # interictal, filtered with CSP-C
+
+n_samples = np.zeros(2)
+n_samples[0], n_samples[1] = X1test.shape[0], X2test.shape[0]
+tot_samples = np.sum(n_samples)
+
+# Concatenate learned codebooks
+C = np.concatenate((C1,C2), axis=0)
+n_centroids = C.shape[0]
+master_counts = np.zeros((n_centroids, 2))  # counts of centroids per condition
+
+nu_1, _, _ = si_pairwise_distances_argmin_min(
+    X1test, C, metric, XX)
+nu_2, _, _ = si_pairwise_distances_argmin_min(
+    X2test, C, metric, XX)
+uniq_1, cnts_1 = np.unique(nu_1, return_counts=True)
+uniq_2, cnts_2 = np.unique(nu_2, return_counts=True)
+
+master_counts[uniq_1, 0] = cnts_1
+master_counts[uniq_2, 1] = cnts_2
+
+# Build contingency table and compute chi-squared test
+chi_squared = np.zeros(n_centroids)
+for i_centroid in range(n_centroids):
+    contable = np.zeros((2,2))
+    contable[0, 0] = master_counts[i_centroid, 0] # centroid present, preictal
+    contable[0, 1] = master_counts[i_centroid, 1] # present, interictal
+    contable[1, 0] = n_samples[0] - contable[0, 0] # absent, preictal
+    contable[1, 1] = n_samples[1] - contable[0, 1]
+   
+    p_i = np.sum(contable, axis=1) / tot_samples
+    p_j = np.sum(contable, axis=0) / tot_samples
+    p_ip_j = p_i.reshape(-1,1) * p_j.reshape(1,-1)
+
+    chi_squared[i_centroid] = tot_samples * np.sum(\
+        p_ip_j * ((contable/tot_samples - p_ip_j)/p_ip_j)**2)
 
 rpath = os.path.join(patient_dir, rfname)
 with open(rpath, 'wb') as f:
-    np.savez(f, n_samples=n_samples, counts=counts)
+    np.savez(f, test_counts=test_counts,\
+        master_counts=master_counts, chi_squared=chi_squared)

@@ -2,6 +2,7 @@ import os, sys
 import yaml
 import numpy as np
 from argparse import ArgumentParser
+import scipy.io as sio
 
 # Add path to package directory to access main module using absolute import
 sys.path.insert(0,
@@ -30,7 +31,8 @@ params = dict.fromkeys(
     ['Patient dir', 'Filenames', 'Data'])
 params['Filenames'] = dict.fromkeys(
     ['CSP filters', 'Data indices', 'Codebooks', 'Results'])
-params['Data'] = dict.fromkeys(['Segment length', 'Window length'])
+params['Data'] = dict.fromkeys(
+    ['Segment length', 'Window length', 'Index of CSP filters'])
 
 patient = args.patient
 data_dir = '/lustre/scratch/cmendoza/sikmeans/LKini2019'
@@ -59,6 +61,14 @@ dfname = 'split_%s_winlen-%d_gap-%d.mat' % (overlap_str, winlen, start_gap)
 params['Filenames']['Data indices'] = dfname
 
 patient_dir = os.path.join(data_dir, patient)
+
+# Define index of CSP filters based on # of channels
+fpath = os.path.join(patient_dir, 'metadata.mat')
+metadata = sio.loadmat(fpath, simplify_cells=True)
+n_chan = metadata['metadata']['channel_labels'].size  # num. of channels
+params['Data']['Index of CSP filters'] = [0, n_chan-1]
+
+
 params['Patient dir'] = os.path.join(data_dir, patient)
 Wfname = 'results_band%d_%s_%s_winlen-%d_gap-%d.mat'\
     % (band, method, overlap_str, winlen, start_gap)
