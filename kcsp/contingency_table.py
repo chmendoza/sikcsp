@@ -77,7 +77,7 @@ for i_condition, condition in enumerate(conditions):
 
     # Extract data and apply CSP filter
     X[i_condition] = utils.getCSPdata(
-            dirpath, dfnames, i_start, seglen, W[:, i_condition], n_cpus=n_cpus)
+            dirpath, dfnames, i_start, seglen, W, n_cpus=n_cpus)
 
 
 # Concatenate preictal and interictal test data filtered with CSP-1
