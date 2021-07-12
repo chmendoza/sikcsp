@@ -4,9 +4,10 @@ import os
 import sys
 import numpy as np
 import time
-from numpy.lib.function_base import median
 import yaml
-import ray
+import shutil
+import tempfile
+from joblib import Parallel, delayed, dump, load, parallel_backend
 from argparse import ArgumentParser
 
 # Add path to package directory to access main module using absolute import
@@ -19,7 +20,8 @@ import shift_kmeans.shift_kmeans as sikmeans
 
 def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 
-@ray.remote
+os.environ["OMP_THREAD_LIMIT"]="2"
+
 def _single_fold(params, X, iter_args):
     """ A single fold in a k-fold crossvalidation """
 
@@ -137,9 +139,7 @@ def main():
                         default=1, help="Number of SLURM CPUS")
 
     args = parser.parse_args()
-    n_cpus = args.n_cpus
-
-    ray.init(num_cpus=n_cpus)
+    n_cpus = args.n_cpus    
 
     os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
 
@@ -228,21 +228,34 @@ def main():
     child_params['Algorithm']['n_clusters'] = k1, k2
     child_params['Algorithm']['centroid_length'] = P1, P2
 
-    X_ref = ray.put(X)
-    child_params_ref = ray.put(child_params)
+    folder = tempfile.mkdtemp()
     
-    MCC_ref = []
-    for iter_args in zip(kfold1, kfold2, child_seeds):
-        MCC_ref.append(_single_fold.remote(
-            child_params_ref, X_ref, iter_args))
+    try:
+        os.mkdir(folder)
+    except FileExistsError:
+        pass
 
-    MCC = ray.get(MCC_ref) # list of refs -> list of 1D arrays
-    MCC = np.vstack(MCC) # list of 1D arrays -> 2D array
+    X_filename_memmap = os.path.join(folder, 'X_memmap')
+    dump(X, X_filename_memmap)
+    X_ref = load(X_filename_memmap, mmap_mode='r')
+    
+    # Run k-fold cross-validation in parallel
+    with parallel_backend("loky", inner_max_num_threads=2):
+        MCC_ref = Parallel(n_jobs=n_cpus//2)\
+            (delayed(_single_fold)(child_params, X_ref, iter_args)\
+                for iter_args in zip(kfold1, kfold2, child_seeds))        
+
+    MCC = np.vstack(MCC_ref) # list of 1D arrays -> 2D array
     meanMCC = MCC.mean(axis=0)
 
     rpath = os.path.join(results_dir, rfname)
     with open(rpath, 'wb') as f:
         np.save(f, meanMCC)
+
+    try:
+        shutil.rmtree(folder)
+    except:  # noqa
+        print('Could not clean-up automatically.')
 
 
 if __name__ == '__main__':

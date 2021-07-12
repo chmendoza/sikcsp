@@ -1,7 +1,7 @@
 import os
 import h5py
 import numpy as np
-import ray
+from joblib import Parallel, delayed, parallel_backend
 import numbers
 import tracemalloc, linecache
 
@@ -76,7 +76,6 @@ def apply2list(obj, fun):
         return [apply2list(x, fun) for x in obj]
 
 
-@ray.remote
 def _get_CSPdata_single(fpath, i_start, winlen, W):
     
     n_chan = W.shape[0]
@@ -117,15 +116,13 @@ def getCSPdata(dirpath, dfname, i_start, winlen, W, n_cpus=1):
     """
 
     n_epoch = len(dfname)    
-    X_ref = []
-
-    #NOTE: pass W as ref (e.g. call ray.put)?
-    for i_epoch in range(n_epoch):
-        fpath = os.path.join(dirpath, dfname[i_epoch])
-        X_ref.append(_get_CSPdata_single.remote(
-            fpath, i_start[i_epoch], winlen, W))
     
-    X = ray.get(X_ref) #list of refs -> list of numpy arrays
+    with parallel_backend("loky", inner_max_num_threads=1):
+        X = Parallel(n_jobs=n_cpus)(delayed(_get_CSPdata_single)\
+            (os.path.join(dirpath, dfname[i_epoch]),\
+                i_start[i_epoch], winlen, W) for i_epoch in range(n_epoch))
+
+       
     X = np.concatenate(X, axis=0) # list of 3D np arrays -> 3D array       
     X = np.transpose(X, (1, 0, 2))
 
