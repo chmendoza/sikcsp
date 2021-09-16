@@ -1,20 +1,15 @@
+"""
+Print the cross-validation results for a given subject and spectral band
+
+Print the results from all the binary classifiers where experiments were run, and print which were the best hyper-parameters.
+"""
+
 #%%
-import os, sys, re
+import os
 import numpy as np
-import time
-import yaml
 from argparse import ArgumentParser
-
-# Add path to package directory to access main module using absolute import
-sys.path.insert(0,
-                os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..')))
-
-import shift_kmeans.shift_kmeans as sikmeans
-from kcsp import utils, bayes
-
-def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
-
+import glob
+import re
 
 # Parse command-line arguments
 parser = ArgumentParser()
@@ -23,29 +18,62 @@ parser.add_argument("-d", "--dir", dest="data_dir",
 parser.add_argument("-b", "--band", dest="band", type=int,
                     help="Spectral band chosen")
 
+
 args = parser.parse_args()
 
 data_dir = args.data_dir
 band = args.band
 
-n_clusters = [4, 8, 16, 32, 64, 128]
-centroid_lengths = [30, 40, 60, 120, 200, 350]
-method = 'regular'
-n_folds = 10
+os.chdir(data_dir)
 
-MCC = np.zeros((2,len(n_clusters), len(centroid_lengths)))
-for i_k, k in enumerate(n_clusters):
-    for i_P, P in enumerate(centroid_lengths):        
-        foldname = 'band%d_%s_k%d-%d_P%d-%d' % (
-            band, method, k, k, P, P)        
-        rfname = 'crossval_band%d_%s_k%d-%d_P%d-%d.npy'\
-            % (band, method, k, k, P, P)
-        fpath = os.path.join(data_dir, foldname, rfname)
-        MCC[:,i_k, i_P] = np.load(fpath)        
+n_clusters = np.r_[4, 8, 16, 32, 64, 128]
+centroid_length = np.r_[30, 40, 60, 120, 200, 350]
+MCC = np.zeros((6, 6))
+best_MCC_max = 0
+best_MCC = np.zeros((6, 6))
+best_clf, best_C, best_k, best_P = None, None, None, None
 
-for ii in range(2): # loop over {MAP, ML}
-    with np.printoptions(precision=3, floatmode='fixed'):            
-        print(MCC[ii])
+filepat = 'averageMCC_band\d_clf(?P<clf>\d+)(_C(?P<C>.+))*[.]npy'
+filepat = re.compile(filepat)
 
-np.savetxt(os.path.join(data_dir, 'averageMCC.csv'), MCC[1], delimiter=",")
+filelistpat = f'averageMCC_band{band}*.npy'
+filelist = glob.glob(filelistpat)
+filelist.sort()
 
+for file in filelist:    
+    match = filepat.match(file)
+    patdict = match.groupdict()
+    C = patdict['C']
+    clf = patdict['clf']
+
+    MCC = np.load(file)
+    imax = np.unravel_index(np.argmax(MCC), MCC.shape)
+    MCC_max = MCC[imax]
+    k = n_clusters[imax[0]]
+    P = centroid_length[imax[1]]
+
+    if C:
+        print(f'Classifier={clf}, C={C}, '
+              f'best (k,P,MCC)={k},{P},{MCC_max}')
+    else:
+        print(f'Classifier={clf}, '
+              f'best (k,P,MCC)={k},{P},{MCC_max}')
+
+    if MCC_max > best_MCC_max:
+        best_MCC_max = MCC_max
+        best_k = k
+        best_P = P
+        best_MCC = MCC
+        best_clf = clf
+        if C:
+            best_C = C
+        else:
+            best_C = None
+
+print(f'Best overall (k,P,MCC): {best_k},{best_P}, {best_MCC_max}')
+print(f'Best classifier: {best_clf}')
+if best_C:
+    print(f'Best hyperparameter value: {best_C}')
+print(f'Cross-validated average MCC on k-P hyperparameter grid:')
+with np.printoptions(precision=3, floatmode='fixed'):
+        print(best_MCC)

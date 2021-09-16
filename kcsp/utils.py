@@ -1,9 +1,43 @@
-import os
+import os, sys
 import h5py
 import numpy as np
 from joblib import Parallel, delayed, parallel_backend
 import numbers
 import tracemalloc, linecache
+
+sys.path.insert(0,
+                os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from shift_kmeans.wrappers import si_pairwise_distances_argmin_min, si_row_norms
+
+def cluster_assignment(X, C, metric='euclidean'):
+    """ Cluster assingment using a given codebook
+
+    Find the closest centroid in C to the observations (rows) in X, and assign the corresponding cluster labels to those observations.
+
+    Parameters
+    ----------
+    X (array):
+        A data matrix. Rows are observations. X.shape = (m, n).
+    C (array):
+        Shift-invariant codebook of waveforms (rows). C.shape = (m, P). P <= n.   
+
+    Returns
+    -------
+    nu (array):
+        Cluster labels of observations in X, using the codebook C.    
+    """
+
+    P = C.shape[1]  # centroid length
+    XX = None
+
+    if metric == 'euclidean':
+        XX = si_row_norms(X, P, squared=True)
+
+    nu, _, _ = si_pairwise_distances_argmin_min(X, C, metric, XX)
+
+    return nu
+
 
 def loadmat73(fpath, varname):
     """ Load data from a -v7.3 Matlab file."""
@@ -171,6 +205,42 @@ def kfold_split(n_samples, n_folds, shuffle=None, rng=None):
         current = stop
 
 
+def concatenate(X1, X2, winlen):
+    """Concatenate preictal and interictal data along codebook (CSP) axis
+
+    Parameters
+    ----------
+    X1 (array):
+        A matrix of shape (2, N1, L), with preictal data. X1[0] has N1 segments of length L that were filtered with CSP-1. X1[1] has N1 segments of length L that were filtered with CSP-C, with C being the number of ECoG channels. Each segment can be split into N1/winlen windows.
+    X2 (array):
+        A matrix of shape (2, N2, L), with interictal data. X2[0] has N2 segments of length L that were filtered with CSP-1. X2[1] has N2 segments of length L that were filtered with CSP-C, with C being the number of ECoG channels. Each segment can be split into N2/winlen windows.
+    winlen (int):
+        Each segment in X1 and X2 are split into windows of lenth `winlen`.
+    """
+
+    # Reshape data to extract features for classification. Concatenate preictal 
+    # and interictal data along the codebook axis (0). X[0] is the data that was
+    # filtered with CSP-1 and is to be clustered using C1, the preictal 
+    # codebook.
+    n_seg = np.zeros(2, dtype=int)  # Number of segments
+    n_seg[0], n_seg[1] = X1.shape[1], X2.shape[1]
+    tot_seg = n_seg.sum()
+    seglen = X1.shape[2]
+    n_win_per_seg = seglen // winlen
+    # (codebook, segment, window, time):
+    X = np.zeros((2, tot_seg, n_win_per_seg, winlen))
+    for r in range(2):  # codebook
+        # Concatenate preictal and interictal data filtered with CSP-r
+        X_cat = np.concatenate((X1[r], X2[r]), axis=0)
+        # Split test segments into smaller windows. This creates a 3D
+        # matrix with the smaller windows (2D matrices) lying in the last two
+        # indices and the first axis indexing the segments.
+        X[r] = splitdata(X_cat, winlen, keep_dims=False)
+
+    return X
+
+
+
 def splitdata(X, chunk_size, keep_dims=True):
     """
     Split a data into smaller non-overlapping chunks
@@ -221,8 +291,7 @@ def confusion_matrix(s, s_hat):
             X[1,0]: False positives
             X[1,1]: True negatives
     """
-
-    n_samples = s.shape[0]
+    
     classes = np.r_[1, 2]
     N_CLASSES = classes.size
 

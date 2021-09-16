@@ -1,5 +1,7 @@
 """
-Use shift-invariant k-means on top k CSP waves
+Cluster test windows using learned codebooks and get waveform counts using each codebook separately and the master (concatenated) codebook to compute the chi-squared statistic.
+
+TODO: Merge this code into the train_test.py code
 """
 # %%
 import numpy as np
@@ -15,30 +17,37 @@ from argparse import ArgumentParser
 sys.path.insert(0,
                 os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from shift_kmeans.wrappers import si_pairwise_distances_argmin_min, si_row_norms
-from kcsp import utils
+from shift_kmeans.wrappers import si_pairwise_distances_argmin_min
+from kcsp import utils, configcounts
 
 def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 
 
 # Parse command-line arguments
 parser = ArgumentParser()
-parser.add_argument("-f", "--config-file", dest="confpath",
-                    help="YAML configuration file")
-
+parser.add_argument("-k", "--nclusters", dest="n_clusters",
+                    type=int, help="Number of clusters")
+parser.add_argument("-P", "--centroid-length", type=int,
+                    dest="centroid_length", help="Length of cluster centroids")
+parser.add_argument("--patient", dest="patient", help="Patient label")
+parser.add_argument("--band", dest="band", type=int,
+                    help="Spectral band ids")
+parser.add_argument("--classifier", dest="clf", help="Classifier id")
+parser.add_argument("-C", type=float, dest="regfactor", default=1,
+                    help="Regularization factor for SVM and logistic\
+                        regression classifiers")
 parser.add_argument("-n", "--n-cpus", dest="n_cpus", type=int,
                     default=1, help="Number of SLURM CPUS")
 
 args = parser.parse_args()
 n_cpus = args.n_cpus
+k = args.n_clusters
+P = args.centroid_length
 
 os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
 
 #%% Read paramaters
-confpath = args.confpath
-
-with open(confpath, 'r') as yamlfile:
-    params = yaml.load(yamlfile, Loader=yaml.FullLoader)
+params = configcounts.configure_experiment(args)
 
 print('=========== Configuration =============')
 print(yaml.dump(params, sort_keys=False))
@@ -51,6 +60,8 @@ rfname = params['Filenames']['Results']
 winlen = params['Data']['Window length']
 seglen = params['Data']['Segment length']
 i_csp = params['Data']['Index of CSP filters']
+i_csp = list(map(int, i_csp.split()))  # str->list of ints
+clfdict = params['Classifier']
 
 
 #%% Get the CSP filters

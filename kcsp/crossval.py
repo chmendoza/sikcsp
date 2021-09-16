@@ -1,12 +1,19 @@
-# Perform k-fold crossvalidation of a single point in the hyperparameter grid. Send each fold to a child Python process, using the multiprocessing module.
+"""
+Cross-validate a binary classifier for hyper-parameter tuning
+
+Use preictal and preictal codebooks pre-learned in dict4cv.py, extract BoW features from cluster assignments, and cross-validate a binary classifier using the Matthews Correlation Coefficient (MCC).
+"""
+
 
 import os
 import sys
+from sklearn.metrics import matthews_corrcoef
 import numpy as np
 import time
 import yaml
 import shutil
 import tempfile
+import pickle
 from joblib import Parallel, delayed, dump, load, parallel_backend
 from argparse import ArgumentParser
 
@@ -15,28 +22,33 @@ sys.path.insert(0,
                 os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              '..')))
 
-from kcsp import utils, bayes
-import shift_kmeans.shift_kmeans as sikmeans
+from kcsp import utils, classifier, configcv
 
 def minusone(x): return x - 1  # Matlab index starts at 1, Python at 0
 
-os.environ["OMP_THREAD_LIMIT"]="2"
+os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
+os.environ["OMP_THREAD_LIMIT"] = "2"
+DATA_DIR = os.environ['DATA_DIR']
+
+
 
 def _single_fold(params, X, iter_args):
     """ A single fold in a k-fold crossvalidation """
 
     winlen = params['Window length']
-    metric = params['Algorithm']['metric']
-    init = params['Algorithm']['init']
-    n_runs = params['Algorithm']['n_runs']
-    k1, k2 = params['Algorithm']['n_clusters']
-    P1, P2 = params['Algorithm']['centroid_length']
-
+    metric = params['Metric']
+    clfdict = params['Classifier']
+    clfname = clfdict['name']    
+    if 'params' in clfdict:
+        clfparams = clfdict['params']
+    else:
+        clfparams = dict()
+    
     # Unpack the iterable's item passed to the child process
-    kfold_preictal, kfold_interictal, seed = iter_args
+    C, kfold_preictal, kfold_interictal, seed = iter_args
 
     # Each child gets its own random seed
-    rng = np.random.default_rng(seed)
+    # rng = np.random.default_rng(seed)    
 
     ## Get indices of one cross-validation fold
     train_ind, test_ind = [0]*2, [0]*2
@@ -44,116 +56,81 @@ def _single_fold(params, X, iter_args):
     train_ind[1], test_ind[1] = kfold_interictal
 
     # Split (cross-validation) training segments into smaller windows
-    # Number of segments
-    n_seg = np.zeros(2, dtype=int)
+    n_seg = np.zeros(2, dtype=int)  # Number of segments
     n_seg[0], n_seg[1] = train_ind[0].size, train_ind[1].size
-    n_csp, _, seglen = X[0].shape
-    n_win_per_seg = seglen // winlen    
-    Xtrain = [0] * 2
-    for s in range(2):  # class segment
-        n_win = n_win_per_seg * n_seg[s]
-        Xtrain[s] = np.zeros((n_csp, n_win, winlen))
-        for r in range(2): # CSP filter
-            Xtrain[s][r] = utils.splitdata(X[s][r, train_ind[s]], winlen)
+    tot_seg = n_seg.sum()
+    seglen = X[0].shape[2]
+    n_win_per_seg = seglen // winlen
+    # (codebook, segment, window, time):
+    Xtrain = np.zeros((2,tot_seg,n_win_per_seg,winlen))
+    for r in range(2):  # codebook
+        for s in range(2):  # segment class            
+            Xtrain[r, s*n_seg[0]:n_seg[0]+s*n_seg[1]] =\
+                utils.splitdata(X[s][r, train_ind[s]], winlen, keep_dims=False)
 
-    # Training begins
-    C1, _, _, _, _, _ = sikmeans.shift_invariant_k_means(
-        Xtrain[0][0], k1, P1, metric=metric, init=init, n_init=n_runs, rng=rng,  verbose=True)
-    C2, _, _, _, _, _ = sikmeans.shift_invariant_k_means(
-        Xtrain[1][1], k2, P2, metric=metric, init=init, n_init=n_runs, rng=rng,  verbose=True)
-
-    # Estimate likelihood and prior
-    p_C = bayes.likelihood(Xtrain, (C1,C2), metric=metric) #(2,k1,k2)
-    N1, N2 = Xtrain[0].shape[1], Xtrain[1].shape[1]  # Number of windows
-    p_S = np.zeros(2)
-    p_S[0] = N1/(N1+N2)
-    p_S[1] = N2/(N1+N2)
-
-    # Training ends, Testing begins
-          
-    # Concatenate preictal and interictal data filtered with CSP-1
-    X1test = np.concatenate((X[0][0,test_ind[0]], X[1][0,test_ind[1]]), axis=0)
-    # Concatenate preictal and interictal data filtered with CSP-C
-    X2test = np.concatenate((X[0][1,test_ind[0]], X[1][1,test_ind[1]]), axis=0)
-    
-    # Split (crossval) test segments into smaller windows. This creates a 3D 
-    # matrix with the smaller windows (2D matrices) lying in the last two 
-    # indices and the first axis indexing the segments.
-    X1test = utils.splitdata(X1test, winlen, keep_dims=False)
-    X2test = utils.splitdata(X2test, winlen, keep_dims=False)
-
-    # Initialize estimated label, s_hat
-    n_seg = X1test.shape[0]  # Number of test segments
-    s_hat = np.zeros((2, n_seg), dtype=int)
-
-    # Predict class label using MAP and ML
-    likelihood_weights = np.ones_like(p_S) * 0.5
-    for i_segment in np.arange(n_seg):
-        
-        # Cluster assingments for windows in a segment of unknown class, 
-        # filtered with CSP-1 and using the preictal codebook:
-        nu_1 = bayes.cluster_assignment(X1test[i_segment], C1, metric=metric)
-        # Cluster assingments of data filtered with CSP-C and using the 
-        # interictal codebook:
-        nu_2 = bayes.cluster_assignment(X2test[i_segment], C2, metric=metric)
-
-        # Compute log-likelihood
-        evalp_C = p_C[:, nu_1, nu_2] # Eval learned likelihood
-        logp_C = np.full((2, nu_1.size), np.NINF) # Avoid divide-by-zero warning
-        np.log(evalp_C, out=logp_C, where=evalp_C > 0)
-        M = X1test[i_segment].shape[0]  # Num. of windows on a segment
-        logMAP = M*np.log(p_S) + np.sum(logp_C, axis=1)
-        logML = M*np.log(likelihood_weights) + np.sum(logp_C, axis=1)
-        
-        # Find MAP and ML estimate
-        s_hat[0, i_segment] = np.argmax(logMAP) + 1 # array index to class label
-        s_hat[1, i_segment] = np.argmax(logML) + 1
-
+    # Training data
+    train_sample = classifier.extract_features(\
+        Xtrain, C, metric=metric, clfname=clfname)
     # True label vector
-    s = np.r_[np.ones(test_ind[0].size, dtype=int), \
-        2 * np.ones(test_ind[1].size, dtype=int)]
-
-    # Compute Matthews correlation coefficient (MCC)
-    # Assume that the positive class (preictal) is the minority class and that the  negative class (interictal) is the majority class. Also, there are always examples from both classes.
-    MCC = np.zeros(2)    
-    confmat = [0]*2
-    for ii in np.arange(2): # loop over {MAP, ML}
-        confmat[ii] = utils.confusion_matrix(s, s_hat[ii, :])
-        tp, fn, fp, tn = confmat[ii].flatten()        
-        if (tp == 0 and fp == 0) or (tn == 0 and fn == 0):
-            MCC[ii] = 0            
-        else:            
-            MCC[ii] = (tp * tn - fp * fn) /\
-                np.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
-
-    return MCC
+    s_true = np.r_[np.ones(n_seg[0], dtype=int),\
+                   2 * np.ones(n_seg[1], dtype=int)]
     
+    # Instantiate and train classifier
+    clf = classifier.fit(train_sample, s_true,\
+        clfname=clfname, clfparams=clfparams)
+
+    # ==== Training ends, Testing begins ====
+    # Prepare data
+    n_seg[0], n_seg[1] = test_ind[0].size, test_ind[1].size
+    tot_seg = n_seg.sum()
+    Xtest = np.zeros((2, tot_seg, n_win_per_seg, winlen))
+    for r in range(2):
+        # Concatenate preictal and interictal data filtered with CSP-r
+        Xtest_cat = np.concatenate(
+        (X[0][r, test_ind[0]], X[1][r, test_ind[1]]), axis=0)
+        
+        # Split (crossval) test segments into smaller windows. This creates a 3D
+        # matrix with the smaller windows (2D matrices) lying in the last two
+        # indices and the first axis indexing the segments.
+        Xtest[r] = utils.splitdata(Xtest_cat, winlen, keep_dims=False)
+
+    test_sample = classifier.extract_features(\
+        Xtest, C, metric=metric, clfname=clfname)
+    s_hat = clf.predict(test_sample)
+    # True label vector
+    s_true = np.r_[np.ones(n_seg[0], dtype=int),
+                   2 * np.ones(n_seg[1], dtype=int)]
+    
+    return matthews_corrcoef(s_true, s_hat)
+
 
 def main():
-    # Parse command-line arguments
-    parser = ArgumentParser()
-    parser.add_argument("-f", "--config-file", dest="confpath",
-                        help="YAML configuration file")
 
+    # Parse command-line arguments
+    parser = ArgumentParser()    
+    parser.add_argument("--patient", dest="patient", help="Patient label")
+    parser.add_argument("--band", dest="band",\
+        type=int, help="Spectral band ids")
+    parser.add_argument("--classifier", dest="clf", help="Classifier id")
+    parser.add_argument("-C", type=float, dest="regfactor", default=1,
+                    help="Regularization factor for SVM and logistic\
+                        regression classifiers")
     parser.add_argument("-n", "--n-cpus", dest="n_cpus", type=int,
                         default=1, help="Number of SLURM CPUS")
 
-    args = parser.parse_args()
-    n_cpus = args.n_cpus    
+    args = parser.parse_args()    
+    n_cpus = args.n_cpus
+    band = args.band
+    n_clusters = [4, 8, 16, 32, 64, 128]    
+    centroid_length = [30, 40, 60, 120, 200, 350]
 
-    os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
+    # Dataset (patient) folder
+    patient = args.patient
+    patient_dir = os.path.join(DATA_DIR, patient)
 
     #%% Read paramaters to set up the experiment
-    confpath = args.confpath
+    params = configcv.configure_experiment(args)
 
-    with open(confpath, 'r') as yamlfile:
-        params = yaml.load(yamlfile, Loader=yaml.FullLoader)
-
-    print('=========== Configuration =============')
-    print(yaml.dump(params, sort_keys=False))
-    print('=======================================')
-    patient_dir = params['Patient dir']
-    results_dir = params['Results dir']    
     wfname = params['Filenames']['CSP filters']
     dfname = params['Filenames']['Data indices']
     rfname = params['Filenames']['Results']
@@ -162,22 +139,13 @@ def main():
     seglen = params['Data']['Segment length']
     #NOTE:works only for one index (filter):
     i_csp = params['Data']['Index of CSP filters']
-    metric = params['Algorithm']['metric']
-    init = params['Algorithm']['init']
-    n_runs = params['Algorithm']['n_runs']
-    k1, k2 = params['Algorithm']['n_clusters']
-    P1, P2 = params['Algorithm']['centroid_length']
-    init_seed = params['Random seed']
+    i_csp = list(map(int,i_csp.split())) # str->list of ints
+    metric = params['Metric']
+    clfdict = params['Classifier']
 
-    #%% Random generator
-    seed = np.random.SeedSequence(init_seed)
-    print('Initial random seed: %s' % seed.entropy)
-    rng = np.random.default_rng(seed)
-    if init_seed is None:
-        print('Saving initial seed to disk...')
-        params['Random seed'] = seed.entropy
-        with open(confpath, 'w') as yamfile:
-            yaml.dump(params, yamfile, sort_keys=False)
+    print('=========== Configuration =============')
+    print(yaml.dump(params, sort_keys=False))
+    print('=======================================')
 
     #%% Get the CSP filters
     wpath = os.path.join(patient_dir, wfname)
@@ -189,47 +157,28 @@ def main():
     conditions = ['preictal', 'interictal']
     X = [0]*2
     tic = time.perf_counter()
-    n_samples = [0] * 2  # Num. of training samples [preictal, interictal]
+    # Num. of training samples [preictal, interictal]
+    n_samples = [0] * 2
     for i_condition, condition in enumerate(conditions):
-        # file names and start indices of preictal segments
-        dirpath = os.path.join(patient_dir, condition)
-        fpath = os.path.join(dirpath, dfname)
-        i_start = utils.loadmat73(fpath, 'train_indices')
-        i_start = utils.apply2list(i_start, np.squeeze)
-        i_start = utils.apply2list(i_start, minusone)    
-        n_samples[i_condition] = utils.apply2list(i_start, np.size)
-        n_samples[i_condition] = np.sum(np.array(n_samples[i_condition]))
-        dfnames = utils.loadmat73(fpath, 'train_names')
-
-
-        # Extract data and apply CSP filter
-        X[i_condition] = utils.getCSPdata(
-            dirpath, dfnames, i_start, seglen, W, n_cpus=n_cpus)
+         # file names and start indices of preictal segments
+         dirpath = os.path.join(patient_dir, condition)
+         fpath = os.path.join(dirpath, dfname)
+         i_start = utils.loadmat73(fpath, 'train_indices')
+         i_start = utils.apply2list(i_start, np.squeeze)
+         i_start = utils.apply2list(i_start, minusone)
+         n_samples[i_condition] = utils.apply2list(i_start, np.size)
+         n_samples[i_condition] = np.sum(
+             np.array(n_samples[i_condition]))
+         dfnames = utils.loadmat73(fpath, 'train_names')
+         # Extract data and apply CSP filter
+         X[i_condition] = utils.getCSPdata(
+             dirpath, dfnames, i_start, seglen, W, n_cpus=n_cpus)
 
     toc = time.perf_counter()
     print("Data gathered and filtered after %0.4f seconds" % (toc - tic))
 
-    kfold1 = utils.kfold_split(
-        n_samples[0], n_folds, shuffle=True, rng=rng)
-    kfold2 = utils.kfold_split(
-        n_samples[1], n_folds, shuffle=True, rng=rng)    
-
-    # For each fold, pass a different seed to the shift-invariant k-means algo
-    ss = rng.bit_generator._seed_seq
-    child_seeds = ss.spawn(n_folds)
-
-    child_params = dict.fromkeys(['Window length', 'Algorithm'])
-    child_params['Window length'] = winlen
-    child_params['Algorithm'] = dict.fromkeys(
-        ['metric', 'init', 'n_runs', 'n_clusters', 'centroid_length'])
-    child_params['Algorithm']['metric'] = metric
-    child_params['Algorithm']['init'] = init
-    child_params['Algorithm']['n_runs'] = n_runs
-    child_params['Algorithm']['n_clusters'] = k1, k2
-    child_params['Algorithm']['centroid_length'] = P1, P2
-
+    # temp folder to save memmap of X (joblib)
     folder = tempfile.mkdtemp()
-    
     try:
         os.mkdir(folder)
     except FileExistsError:
@@ -238,25 +187,81 @@ def main():
     X_filename_memmap = os.path.join(folder, 'X_memmap')
     dump(X, X_filename_memmap)
     X_ref = load(X_filename_memmap, mmap_mode='r')
-    
-    # Run k-fold cross-validation in parallel
+
+    child_params = {}
+    child_params['Window length'] = winlen
+    child_params['Metric'] = metric
+    child_params['Classifier'] = clfdict
+
+    n_k = len(n_clusters)
+    n_P = len(centroid_length)
+    meanMCC = np.zeros((n_k, n_P))
+
     with parallel_backend("loky", inner_max_num_threads=2):
-        MCC_ref = Parallel(n_jobs=n_cpus//2)\
-            (delayed(_single_fold)(child_params, X_ref, iter_args)\
-                for iter_args in zip(kfold1, kfold2, child_seeds))        
+        with Parallel(n_jobs=n_cpus//2) as parallel:
+            for i_k, k in enumerate(n_clusters):
+                for i_P, P in enumerate(centroid_length):
 
-    MCC = np.vstack(MCC_ref) # list of 1D arrays -> 2D array
-    meanMCC = MCC.mean(axis=0)
+                    print(f"Crossvalidating for k={k} and P={P}...")
+                    tic = time.perf_counter()
 
-    rpath = os.path.join(results_dir, rfname)
+                    # Folder where to save intermediate data for each k-P point
+                    kP_dirname = f'band{band}_k{k}-{k}_P{P}-{P}'
+                    kP_dir = os.path.join(patient_dir, kP_dirname)
+
+                    #%% Random generator         
+                    # entropy.txt has the entropy used to make the 
+                    # crossvalidation splits (folds), which are the same used 
+                    # to compute the intermediate crossval codebooks and to do 
+                    # run the full crossval with a given classifier.
+                    rng_path = os.path.join(kP_dir, 'entropy.txt')
+                    with open(rng_path, 'r') as f:
+                        seed = int(f.read().strip())
+                        seed = np.random.SeedSequence(entropy=seed)
+                        print(f'Initial random seed: {seed.entropy}')
+
+                    rng = np.random.default_rng(seed)
+
+                    kfold1 = utils.kfold_split(
+                        n_samples[0], n_folds, shuffle=True, rng=rng)
+                    kfold2 = utils.kfold_split(
+                        n_samples[1], n_folds, shuffle=True, rng=rng)
+
+                    # C is a list of tuples (C1, C2)
+                    rpath = os.path.join(kP_dir, 'crossval_codebooks.pickle')
+                    with open(rpath, 'rb') as f:
+                        C = pickle.load(f)
+
+                    # For each fold, pass a different seed to the 
+                    # shift-invariant k-means algo
+                    ss = rng.bit_generator._seed_seq
+                    child_seeds = ss.spawn(n_folds)
+
+                    # Run k-fold cross-validation in parallel
+                    MCC_ref = parallel(delayed(_single_fold)\
+                        (child_params, X_ref, iter_args)\
+                            for iter_args in zip(C, kfold1, kfold2, child_seeds))
+
+                    meanMCC[i_k, i_P] = np.array(MCC_ref).mean()
+
+                    toc = time.perf_counter()
+                    print('Crossvalidation finished after '
+                          f'{toc-tic:0.4f} seconds.')                    
+            
+    # Print average MCC matrix
+    with np.printoptions(precision=3, floatmode='fixed'):
+        print(meanMCC)
+
+    # Save average MCC matrix
+    rpath = os.path.join(patient_dir, rfname)
     with open(rpath, 'wb') as f:
         np.save(f, meanMCC)
-
+    
     try:
         shutil.rmtree(folder)
     except:  # noqa
         print('Could not clean-up automatically.')
-
+        
 
 if __name__ == '__main__':
     main()
